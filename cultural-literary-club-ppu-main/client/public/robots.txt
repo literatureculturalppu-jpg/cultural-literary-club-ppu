@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://cultural-literary-club.vercel.app/sitemap.xml
