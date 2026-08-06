@@ -21,11 +21,34 @@ function stripTokens(content: string): string {
 }
 
 /**
+ * While a message is still streaming in token-by-token, the model's raw
+ * "[[REF|activity|12|..." syntax is briefly visible mid-token (before its
+ * closing "]]" has arrived). Trimming any trailing, not-yet-closed "[[..."
+ * (or a lone dangling "[") keeps the chat looking clean while typing and
+ * lets the chip pop in fully-formed the instant it completes, instead of
+ * flashing raw brackets at the user.
+ */
+function hideTrailingIncompleteToken(content: string): string {
+  const lastOpen = content.lastIndexOf("[[");
+  if (lastOpen !== -1 && !content.slice(lastOpen).includes("]]")) {
+    return content.slice(0, lastOpen);
+  }
+  if (content.endsWith("[") && !content.endsWith("[[")) {
+    return content.slice(0, -1);
+  }
+  return content;
+}
+
+/**
  * Splits an assistant message into markdown text segments (rendered via
  * Streamdown, same as before) and special reference/navigation/action
  * tokens (rendered as clickable chip cards instead of plain link text).
+ *
+ * `isStreaming` should be true only for the message currently being typed
+ * out live — see `hideTrailingIncompleteToken` above.
  */
-export function renderBasirContent(content: string) {
+export function renderBasirContent(rawContent: string, isStreaming = false) {
+  const content = isStreaming ? hideTrailingIncompleteToken(rawContent) : rawContent;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let key = 0;

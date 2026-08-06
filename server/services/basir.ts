@@ -344,10 +344,15 @@ function buildAccountContext(
   return lines.join("\n");
 }
 
-export async function chatWithBasir(
+/**
+ * Gathers club-context + system prompt + full Gemini `contents` array for a
+ * given conversation. Shared by both the streaming and non-streaming entry
+ * points below so the two never drift out of sync with each other.
+ */
+async function prepareGeminiContents(
   history: ChatMessage[],
   currentUser: CurrentUserContext,
-): Promise<string> {
+) {
   if (!ENV.geminiApiKey) {
     throw new Error("GEMINI_API_KEY is not configured");
   }
@@ -379,7 +384,10 @@ export async function chatWithBasir(
     externalLinksCtx,
   );
 
-  const contents = [];
+  const contents: Array<{
+    role: string;
+    parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>;
+  }> = [];
 
   // Add system instruction as a user/model pair at the start
   contents.push({
@@ -413,20 +421,37 @@ export async function chatWithBasir(
     });
   }
 
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  return contents;
+}
+
+const GEMINI_MODEL = "gemini-2.5-flash";
+
+const GENERATION_CONFIG = {
+  maxOutputTokens: 4096,
+  temperature: 0.7,
+};
+
+const SAFETY_SETTINGS = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+];
+
+const FALLBACK_MESSAGE = "عذراً، لم أتمكن من توليد إجابة. يرجى المحاولة مرة أخرى.";
+
+export async function chatWithBasir(
+  history: ChatMessage[],
+  currentUser: CurrentUserContext,
+): Promise<string> {
+  const contents = await prepareGeminiContents(history, currentUser);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
   const body = JSON.stringify({
     contents,
-    generationConfig: {
-      maxOutputTokens: 4096,
-      temperature: 0.7,
-    },
-    safetySettings: [
-      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-    ],
+    generationConfig: GENERATION_CONFIG,
+    safetySettings: SAFETY_SETTINGS,
   });
 
   let response: Response | null = null;
@@ -442,16 +467,115 @@ export async function chatWithBasir(
   }
 
   if (!response || !response.ok) {
-    const errorText = await response?.text() ?? "no response";
-    console.error("[Basir] Gemini API error:", response?.status);
+    console.error("[Basir] Gemini API error:", response?.status, await response?.text().catch(() => ""));
     throw new Error("Gemini API error");
   }
 
   const data = await response.json();
 
-  const text =
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-    "عذراً، لم أتمكن من توليد إجابة. يرجى المحاولة مرة أخرى.";
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? FALLBACK_MESSAGE;
 
   return text;
+}
+
+/**
+ * Streaming counterpart of `chatWithBasir`. Calls Gemini's
+ * `streamGenerateContent` endpoint (Server-Sent Events) and invokes
+ * `onChunk` with each incremental piece of text as it arrives, so the
+ * caller (an SSE route to the browser) can forward it live instead of
+ * waiting for the full reply. Resolves with the full accumulated text once
+ * the stream ends, for logging/quota purposes.
+ *
+ * Retries are only attempted *before* the stream has produced any output
+ * (e.g. the initial connection was rate-limited) — once tokens have started
+ * flowing we let the stream run to completion rather than restarting and
+ * duplicating partial output the user has already seen.
+ */
+export async function streamChatWithBasir(
+  history: ChatMessage[],
+  currentUser: CurrentUserContext,
+  onChunk: (textDelta: string) => void,
+): Promise<string> {
+  const contents = await prepareGeminiContents(history, currentUser);
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent`;
+
+  const body = JSON.stringify({
+    contents,
+    generationConfig: GENERATION_CONFIG,
+    safetySettings: SAFETY_SETTINGS,
+  });
+
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    response = await fetch(`${url}?alt=sse&key=${ENV.geminiApiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (response.ok || (response.status !== 503 && response.status !== 429)) break;
+    console.warn(`[Basir] Retrying stream (${attempt + 1}/3) after ${response.status}`);
+    await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+  }
+
+  if (!response || !response.ok) {
+    console.error("[Basir] Gemini stream error:", response?.status, await response?.text().catch(() => ""));
+    throw new Error("Gemini API error");
+  }
+
+  if (!response.body) {
+    throw new Error("Gemini API returned no stream body");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+  let blockedReason: string | null = null;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      // Keep the last (possibly incomplete) line in the buffer for the next chunk.
+      buffer = lines.pop() ?? "";
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith("data:")) continue;
+        const jsonStr = line.slice(5).trim();
+        if (!jsonStr || jsonStr === "[DONE]") continue;
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const delta: string | undefined = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (delta) {
+            fullText += delta;
+            onChunk(delta);
+          }
+          const finishReason = parsed?.candidates?.[0]?.finishReason;
+          if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
+            blockedReason = finishReason;
+          }
+        } catch {
+          // Ignore malformed/partial SSE frame; next chunk usually completes it.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!fullText) {
+    if (blockedReason) {
+      console.warn("[Basir] Gemini stream finished without output, reason:", blockedReason);
+    }
+    fullText = FALLBACK_MESSAGE;
+    onChunk(fullText);
+  }
+
+  return fullText;
 }

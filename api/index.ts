@@ -6,6 +6,7 @@ import { registerOAuthRoutes } from "../server/_core/oauth.js";
 import { runScheduledBookCleanup, runScheduledWorkLogsCleanup } from "../server/db.js";
 import { runScheduledMeetingsCleanup, autoEndEmptyLiveMeetings } from "../server/services/meetingsDb.js";
 import { securityHeaders, rateLimiter } from "../server/_core/security.js";
+import { registerBasirStreamRoute } from "../server/routes/basirStream.js";
 
 const app = express();
 // Vercel's edge always sits in front of this function, so `req.ip` is
@@ -81,6 +82,12 @@ app.get("/api/cron/worklogs-cleanup", async (req, res) => {
     res.status(500).json({ error: "Cleanup failed" });
   }
 });
+
+// Basir's streaming chat endpoint. Deliberately registered BEFORE the tRPC
+// middleware and as a plain Express route (not a tRPC procedure) because it
+// needs to flush partial output to the client as it's generated — see
+// server/routes/basirStream.ts for the full rationale.
+registerBasirStreamRoute(app);
 
 app.use(
   "/api/trpc",

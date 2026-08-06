@@ -9,7 +9,7 @@ import { useBasirChat } from "@/hooks/useBasirChat";
 export default function BasirChat() {
   const { isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
-  const { messages, sendMessage, clearHistory, isLoading, settings, usage, quotaExceeded } =
+  const { messages, sendMessage, stopGenerating, clearHistory, isLoading, settings, usage, quotaExceeded } =
     useBasirChat(isAuthenticated, (path) => setLocation(path));
 
   if (loading) {
@@ -105,6 +105,7 @@ export default function BasirChat() {
             messages={messages}
             onSendMessage={sendMessage}
             isLoading={isLoading}
+            onStop={stopGenerating}
             placeholder={
               usage && usage.remaining <= 0
                 ? "انتهت حصتك اليومية — عد غداً"

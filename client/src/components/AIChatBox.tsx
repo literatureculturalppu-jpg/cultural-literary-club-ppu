@@ -2,9 +2,22 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, User, Sparkles, Paperclip, X, FileText, FileImage } from "lucide-react";
+import { Send, User, Sparkles, Paperclip, X, FileText, FileImage, Square } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Streamdown } from "streamdown";
+
+/** Three bouncing dots shown inside the assistant bubble before the first
+ * streamed token arrives — replaces the old detached spinner bubble so the
+ * "thinking" state and the "typing" state live in the exact same spot. */
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1 py-1" aria-label="بصير يكتب">
+      <span className="size-1.5 rounded-full bg-current opacity-60 animate-bounce [animation-delay:-0.3s]" />
+      <span className="size-1.5 rounded-full bg-current opacity-60 animate-bounce [animation-delay:-0.15s]" />
+      <span className="size-1.5 rounded-full bg-current opacity-60 animate-bounce" />
+    </span>
+  );
+}
 
 /**
  * A file attached to a message, kept purely for on-device display. Only
@@ -54,6 +67,9 @@ export type AIChatBoxProps = {
    */
   isLoading?: boolean;
 
+  /** Called when the user hits the stop button while a response streams in. */
+  onStop?: () => void;
+
   /**
    * Placeholder text for the input field
    */
@@ -86,7 +102,7 @@ export type AIChatBoxProps = {
    * callers (e.g. Basir) turn special inline tokens into rich elements like
    * clickable reference chips.
    */
-  renderAssistantContent?: (content: string) => React.ReactNode;
+  renderAssistantContent?: (content: string, isStreaming?: boolean) => React.ReactNode;
 };
 
 /**
@@ -144,6 +160,7 @@ export function AIChatBox({
   messages,
   onSendMessage,
   isLoading = false,
+  onStop,
   placeholder = "Type your message...",
   className,
   height = "600px",
@@ -276,6 +293,8 @@ export function AIChatBox({
               {displayMessages.map((message, index) => {
                 // Apply min-height to last message only if NOT loading (when loading, the loading indicator gets it)
                 const isLastMessage = index === displayMessages.length - 1;
+                const isStreamingPlaceholder =
+                  isLastMessage && isLoading && message.role === "assistant";
                 const shouldApplyMinHeight =
                   isLastMessage && !isLoading && minHeightForLastMessage > 0;
 
@@ -289,7 +308,7 @@ export function AIChatBox({
                         : "justify-start items-start"
                     )}
                     style={
-                      shouldApplyMinHeight
+                      (shouldApplyMinHeight || isStreamingPlaceholder) && minHeightForLastMessage > 0
                         ? { minHeight: `${minHeightForLastMessage}px` }
                         : undefined
                     }
@@ -336,11 +355,15 @@ export function AIChatBox({
                       )}
                       {message.role === "assistant" ? (
                         <div className="prose prose-sm dark:prose-invert max-w-none">
-                          {renderAssistantContent ? (
-                            renderAssistantContent(message.content)
-                          ) : (
-                            <Streamdown>{message.content}</Streamdown>
-                          )}
+                          {message.content ? (
+                            renderAssistantContent ? (
+                              renderAssistantContent(message.content, isStreamingPlaceholder)
+                            ) : (
+                              <Streamdown>{message.content}</Streamdown>
+                            )
+                          ) : isStreamingPlaceholder ? (
+                            <TypingDots />
+                          ) : null}
                         </div>
                       ) : (
                         message.content && (
@@ -359,24 +382,6 @@ export function AIChatBox({
                   </div>
                 );
               })}
-
-              {isLoading && (
-                <div
-                  className="flex items-start gap-3"
-                  style={
-                    minHeightForLastMessage > 0
-                      ? { minHeight: `${minHeightForLastMessage}px` }
-                      : undefined
-                  }
-                >
-                  <div className="size-8 shrink-0 mt-1 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Sparkles className="size-4 text-primary" />
-                  </div>
-                  <div className="rounded-lg bg-muted px-4 py-2.5">
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                  </div>
-                </div>
-              )}
             </div>
           </ScrollArea>
         )}
@@ -447,16 +452,15 @@ export function AIChatBox({
             rows={1}
           />
           <Button
-            type="submit"
+            type={isLoading ? "button" : "submit"}
             size="icon"
-            disabled={(!input.trim() && pendingFiles.length === 0) || isLoading}
+            onClick={isLoading ? onStop : undefined}
+            disabled={!isLoading && !input.trim() && pendingFiles.length === 0}
+            variant={isLoading ? "outline" : "default"}
             className="shrink-0 h-[38px] w-[38px]"
+            aria-label={isLoading ? "إيقاف التوليد" : "إرسال"}
           >
-            {isLoading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Send className="size-4" />
-            )}
+            {isLoading ? <Square className="size-3.5 fill-current" /> : <Send className="size-4" />}
           </Button>
         </div>
       </form>

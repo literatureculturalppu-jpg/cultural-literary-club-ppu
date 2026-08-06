@@ -13,6 +13,7 @@ import { sdk } from "./sdk.js";
 import { sniffImageMagicBytes } from "../routers.js";
 import { storagePut } from "../storage.js";
 import { securityHeaders, rateLimiter } from "./security.js";
+import { registerBasirStreamRoute } from "../routes/basirStream.js";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -140,6 +141,10 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Basir's streaming chat endpoint — see server/routes/basirStream.ts.
+  // Registered before the tRPC middleware, as a plain Express route, so it
+  // can flush partial output to the client as it's generated.
+  registerBasirStreamRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",

@@ -20,7 +20,7 @@ export default function BasirWidget() {
   const { user } = useAuth();
   const enabled = !!user && user.onboardingCompleted && user.approvalStatus === "approved";
 
-  const { messages, sendMessage, clearHistory, isLoading, settings, usage, quotaExceeded } =
+  const { messages, sendMessage, stopGenerating, clearHistory, isLoading, settings, usage, quotaExceeded } =
     useBasirChat(
       enabled && open,
       // Explicit "take me there" request: minimize the panel and actually
@@ -84,6 +84,7 @@ export default function BasirWidget() {
             messages={messages}
             onSendMessage={sendMessage}
             isLoading={isLoading}
+            onStop={stopGenerating}
             placeholder={usage && usage.remaining <= 0 ? "انتهت حصتك اليومية" : "اسأل بصير..."}
             height="420px"
             className="border-0 rounded-none shadow-none"

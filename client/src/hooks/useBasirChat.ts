@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import type { Message, MessageAttachment } from "@/components/AIChatBox";
 import { isAllowedNavPath } from "@/components/BasirNavChip";
@@ -40,56 +40,61 @@ function saveHistory(messages: Message[]) {
   }
 }
 
+type StreamEvent =
+  | { type: "chunk"; text: string }
+  | { type: "done"; usage: { used: number; limit: number; remaining: number } }
+  | { type: "error"; message: string };
+
+/**
+ * Reads a `fetch` response body as newline-delimited SSE frames
+ * ("data: {...}\n\n") and invokes `onEvent` for each parsed one. Handles
+ * frames arriving split across chunk boundaries.
+ */
+async function consumeSseStream(response: Response, onEvent: (evt: StreamEvent) => void) {
+  if (!response.body) throw new Error("no response body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) continue;
+      const jsonStr = line.slice(5).trim();
+      if (!jsonStr) continue;
+      try {
+        onEvent(JSON.parse(jsonStr) as StreamEvent);
+      } catch {
+        // ignore malformed frame
+      }
+    }
+  }
+}
+
 /**
  * Shared Basir chat logic (message history persisted on-device, daily-quota
- * awareness) used by both the full `/basir` page and the site-wide floating
- * widget, so history and quota state stay in sync no matter where the user
- * chats from.
+ * awareness, live token streaming) used by both the full `/basir` page and
+ * the site-wide floating widget, so history and quota state stay in sync no
+ * matter where the user chats from.
  */
 export function useBasirChat(enabled: boolean, onNavigate?: (path: string) => void) {
   const [messages, setMessages] = useState<Message[]>(loadHistory);
+  const [isLoading, setIsLoading] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const { data: settings } = trpc.basir.getSettings.useQuery();
   const { data: usage, refetch: refetchUsage } = trpc.basir.getUsage.useQuery(undefined, {
     enabled,
   });
 
-  const chatMutation = trpc.basir.chat.useMutation({
-    onSuccess: (data) => {
-      const { cleaned, path } = extractGoto(data.response);
-      setMessages((prev) => {
-        const updated = [...prev, { role: "assistant" as const, content: cleaned }];
-        saveHistory(updated);
-        return updated;
-      });
-      refetchUsage();
-      if (path && onNavigate) {
-        // Small delay so the confirmation sentence is visible for a beat
-        // before the page (and, on the floating widget, the panel itself)
-        // changes out from under the user.
-        setTimeout(() => onNavigate(path), 700);
-      }
-    },
-    onError: (error) => {
-      if (error.data?.code === "TOO_MANY_REQUESTS") {
-        setQuotaExceeded(error.message);
-        refetchUsage();
-        return;
-      }
-      setMessages((prev) => {
-        const updated = [
-          ...prev,
-          {
-            role: "assistant" as const,
-            content: "عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.",
-          },
-        ];
-        saveHistory(updated);
-        return updated;
-      });
-    },
-  });
+  const stopGenerating = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const sendMessage = useCallback(
     async (content: string, files?: File[]) => {
@@ -137,23 +142,94 @@ export function useBasirChat(enabled: boolean, onNavigate?: (path: string) => vo
         content: finalContent,
         attachments: displayAttachments.length > 0 ? displayAttachments : undefined,
       };
-      setMessages((prev) => {
-        const updated = [...prev, userMsg];
-        saveHistory(updated);
-        return updated;
-      });
 
       const chatMessages = [...messages.filter((m) => m.role !== "system"), userMsg].map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       }));
 
-      chatMutation.mutate({
-        messages: chatMessages,
-        attachments: apiAttachments.length > 0 ? apiAttachments : undefined,
-      });
+      // Push the user message immediately, plus an empty assistant
+      // placeholder that fills in live as tokens stream in — this is what
+      // gives Basir the same progressive "typing" feel as other AI chat
+      // tools instead of the reply appearing all at once.
+      setMessages((prev) => [...prev, userMsg, { role: "assistant", content: "" }]);
+      setIsLoading(true);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let streamedText = "";
+
+      const finalize = (text: string) => {
+        const { cleaned, path } = extractGoto(text);
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: cleaned };
+          saveHistory(updated);
+          return updated;
+        });
+        if (path && onNavigate) {
+          setTimeout(() => onNavigate(path), 700);
+        }
+      };
+
+      try {
+        const response = await fetch("/api/basir/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          signal: controller.signal,
+          body: JSON.stringify({
+            messages: chatMessages,
+            attachments: apiAttachments.length > 0 ? apiAttachments : undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({ error: null }));
+          if (response.status === 429) {
+            setQuotaExceeded(body.error ?? "لقد استهلكت حصتك اليومية من الأسئلة.");
+            setMessages((prev) => prev.slice(0, -1)); // drop the empty placeholder
+            refetchUsage();
+            return;
+          }
+          throw new Error(body.error ?? `HTTP ${response.status}`);
+        }
+
+        await consumeSseStream(response, (evt) => {
+          if (evt.type === "chunk") {
+            streamedText += evt.text;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "assistant", content: streamedText };
+              return updated;
+            });
+          } else if (evt.type === "error") {
+            throw new Error(evt.message);
+          }
+          // "done" carries usage stats but the actual text is already fully
+          // streamed in via "chunk" events by that point.
+        });
+
+        finalize(streamedText || "عذراً، لم أتمكن من توليد إجابة. يرجى المحاولة مرة أخرى.");
+        refetchUsage();
+      } catch (error) {
+        if (controller.signal.aborted) {
+          // User hit "stop" — keep whatever text streamed in so far, if any.
+          if (streamedText.trim()) {
+            finalize(streamedText);
+          } else {
+            setMessages((prev) => prev.slice(0, -1));
+          }
+        } else {
+          console.error("[Basir] stream failed", error);
+          finalize("عذراً، حدث خطأ أثناء معالجة طلبك. يرجى المحاولة مرة أخرى.");
+        }
+      } finally {
+        setIsLoading(false);
+        abortRef.current = null;
+      }
     },
-    [messages, chatMutation, usage]
+    [messages, usage, onNavigate, refetchUsage]
   );
 
   const clearHistory = useCallback(() => {
@@ -164,8 +240,9 @@ export function useBasirChat(enabled: boolean, onNavigate?: (path: string) => vo
   return {
     messages,
     sendMessage,
+    stopGenerating,
     clearHistory,
-    isLoading: chatMutation.isPending,
+    isLoading,
     settings,
     usage,
     quotaExceeded,
