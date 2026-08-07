@@ -354,7 +354,9 @@ export async function getActivities() {
     return [];
   }
 
-  return await db.select().from(activities);
+  // Newest first (by creation date) so the most recently published
+  // activity appears at the top of the list.
+  return await db.select().from(activities).orderBy(desc(activities.createdAt));
 }
 
 export async function getActivityById(id: number) {
@@ -402,7 +404,9 @@ export async function getArticles() {
     return [];
   }
 
-  return await db.select().from(articles);
+  // Newest first (by creation date) so the most recently published
+  // article appears at the top of the list.
+  return await db.select().from(articles).orderBy(desc(articles.createdAt));
 }
 
 export async function getArticleById(id: number) {
@@ -618,7 +622,9 @@ export async function getAchievements() {
     return [];
   }
 
-  return await db.select().from(achievements);
+  // Newest first (by creation date) so the most recently added
+  // achievement appears at the top of the list.
+  return await db.select().from(achievements).orderBy(desc(achievements.createdAt));
 }
 
 export async function getAchievementById(id: number) {

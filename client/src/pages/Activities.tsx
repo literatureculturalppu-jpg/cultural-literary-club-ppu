@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar, MapPin, Clock, ChevronDown, ChevronUp,
-  Link2, FileText, Tag, UserCheck, UserPlus, X, Users, Pin
+  Link2, FileText, Tag, UserCheck, UserPlus, X, Users, Pin, Search
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link, useLocation } from "wouter";
@@ -324,8 +324,22 @@ export default function Activities() {
   const { data: activities, isLoading } = trpc.activities.list.useQuery();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
-  const pinned = activities?.filter((a: any) => a.isPinned) ?? [];
-  const rest = activities?.filter((a: any) => !a.isPinned) ?? [];
+  const [query, setQuery] = useState("");
+
+  const filtered = (activities ?? []).filter((a: any) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    const content = parseContent(a.content);
+    return (
+      a.title?.toLowerCase().includes(q) ||
+      a.description?.toLowerCase().includes(q) ||
+      a.location?.toLowerCase().includes(q) ||
+      content.category?.toLowerCase().includes(q)
+    );
+  });
+
+  const pinned = filtered.filter((a: any) => a.isPinned) ?? [];
+  const rest = filtered.filter((a: any) => !a.isPinned) ?? [];
   const { visibleCount, sentinelRef } = useInfiniteReveal(rest.length);
 
   return (
@@ -342,6 +356,15 @@ export default function Activities() {
                 <Button className="bg-accent text-accent-foreground hover:bg-accent/90">إضافة نشاط</Button>
               </Link>
             )}
+          </div>
+          <div className="relative max-w-md mt-8">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث عن نشاط بالعنوان أو الوصف أو المكان..."
+              className="w-full py-2.5 pr-11 pl-4 bg-background border border-border rounded-full text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-accent"
+            />
           </div>
         </div>
       </section>
@@ -372,7 +395,13 @@ export default function Activities() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {rest.length > 0
                   ? rest.slice(0, visibleCount).map((a: any) => <ActivityCard key={a.id} activity={a} />)
-                  : pinned.length === 0 && <div className="col-span-full text-center py-12"><p className="text-muted-foreground text-lg">لا توجد أنشطة حالياً</p></div>
+                  : pinned.length === 0 && (
+                      <div className="col-span-full text-center py-12">
+                        <p className="text-muted-foreground text-lg">
+                          {query.trim() ? "لا توجد نتائج مطابقة لبحثك" : "لا توجد أنشطة حالياً"}
+                        </p>
+                      </div>
+                    )
                 }
               </div>
               {/* Sentinel: reveals the next batch of cards (and their images) only once scrolled into view */}

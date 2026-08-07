@@ -3,16 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Award, Calendar, Building2 } from "lucide-react";
+import { Award, Calendar, Building2, Search } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
 import ShareButtons from "@/components/ShareButtons";
 import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
+import { useState } from "react";
 
 export default function Achievements() {
   const { data: achievements, isLoading } = trpc.achievements.list.useQuery();
   const { user } = useAuth();
-  const { visibleCount, sentinelRef } = useInfiniteReveal(achievements?.length ?? 0);
+  const [query, setQuery] = useState("");
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -40,6 +41,20 @@ export default function Achievements() {
     }
   };
 
+  const filtered = (achievements ?? []).filter((a: any) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return (
+      a.title?.toLowerCase().includes(q) ||
+      a.description?.toLowerCase().includes(q) ||
+      a.awardName?.toLowerCase().includes(q) ||
+      a.awardingOrganization?.toLowerCase().includes(q) ||
+      getCategoryLabel(a.category).toLowerCase().includes(q) ||
+      String(a.year).includes(q)
+    );
+  });
+  const { visibleCount, sentinelRef } = useInfiniteReveal(filtered.length);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Page Header */}
@@ -62,6 +77,15 @@ export default function Achievements() {
               </Link>
             )}
           </div>
+          <div className="relative max-w-md mt-8">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث عن إنجاز بالعنوان أو الجائزة أو الجهة المانحة..."
+              className="w-full py-2.5 pr-11 pl-4 bg-background border border-border rounded-full text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
         </div>
       </section>
 
@@ -83,8 +107,8 @@ export default function Achievements() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {achievements && achievements.length > 0 ? (
-                achievements.slice(0, visibleCount).map((achievement) => (
+              {filtered.length > 0 ? (
+                filtered.slice(0, visibleCount).map((achievement) => (
                   <Card
                     key={achievement.id}
                     className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col"
@@ -173,13 +197,13 @@ export default function Achievements() {
                 <div className="col-span-full text-center py-12">
                   <Award className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
                   <p className="text-muted-foreground text-lg">
-                    لا توجد إنجازات حالياً
+                    {query.trim() ? "لا توجد نتائج مطابقة لبحثك" : "لا توجد إنجازات حالياً"}
                   </p>
                 </div>
               )}
             </div>
           )}
-          {achievements && visibleCount < achievements.length && <div ref={sentinelRef} className="h-1" />}
+          {visibleCount < filtered.length && <div ref={sentinelRef} className="h-1" />}
         </div>
       </section>
 

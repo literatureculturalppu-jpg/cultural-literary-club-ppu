@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, User, Clock, Tag } from "lucide-react";
+import { Calendar, User, Clock, Tag, Search } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
 import ShareButtons from "@/components/ShareButtons";
 import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
+import { useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 interface RichContent {
@@ -149,7 +150,23 @@ export default function Articles() {
   const { data: articles, isLoading } = trpc.articles.list.useQuery();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
-  const { visibleCount, sentinelRef } = useInfiniteReveal(articles?.length ?? 0);
+  const [query, setQuery] = useState("");
+
+  const filtered = (articles ?? []).filter((a: any) => {
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    const rich = parseRichContent(a.content);
+    const cat = CATEGORY_MAP[a.category]?.label ?? a.category ?? "";
+    return (
+      a.title?.toLowerCase().includes(q) ||
+      a.excerpt?.toLowerCase().includes(q) ||
+      a.author?.toLowerCase().includes(q) ||
+      cat.toLowerCase().includes(q) ||
+      (rich?.tags ?? []).some((t: string) => t.toLowerCase().includes(q))
+    );
+  });
+
+  const { visibleCount, sentinelRef } = useInfiniteReveal(filtered.length);
 
   return (
     <div className="min-h-screen bg-background">
@@ -165,6 +182,15 @@ export default function Articles() {
                 <Button className="bg-accent text-accent-foreground hover:bg-accent/90">كتابة مقالة</Button>
               </Link>
             )}
+          </div>
+          <div className="relative max-w-md mt-8">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ابحث عن مقالة بالعنوان أو الكاتب أو التصنيف..."
+              className="w-full py-2.5 pr-11 pl-4 bg-background border border-border rounded-full text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-accent"
+            />
           </div>
         </div>
       </section>
@@ -182,13 +208,19 @@ export default function Articles() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {articles && articles.length > 0
-                ? articles.slice(0, visibleCount).map((a: any) => <ArticleCard key={a.id} article={a} />)
-                : <div className="col-span-full text-center py-12"><p className="text-muted-foreground text-lg">لا توجد مقالات حالياً</p></div>
+              {filtered.length > 0
+                ? filtered.slice(0, visibleCount).map((a: any) => <ArticleCard key={a.id} article={a} />)
+                : (
+                  <div className="col-span-full text-center py-12">
+                    <p className="text-muted-foreground text-lg">
+                      {query.trim() ? "لا توجد نتائج مطابقة لبحثك" : "لا توجد مقالات حالياً"}
+                    </p>
+                  </div>
+                )
               }
             </div>
           )}
-          {articles && visibleCount < articles.length && <div ref={sentinelRef} className="h-1" />}
+          {visibleCount < filtered.length && <div ref={sentinelRef} className="h-1" />}
         </div>
       </section>
     </div>
