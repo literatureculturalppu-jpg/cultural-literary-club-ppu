@@ -166,6 +166,7 @@ import {
   cancelWorkLogDeletionMany,
 } from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
+import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
 import { notifyContentCreated, notifyActivityApproval, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp } from "./services/notify.js";
 import { chatWithBasir } from "./services/basir.js";
 import { generateImageEphemeral } from "./_core/imageGeneration.js";
@@ -251,6 +252,17 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 // another member to "tech_admin".
 const techAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (ctx.user.role !== "tech_admin") {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+  return next({ ctx });
+});
+
+// Broadcast-email procedure — restricted to exactly "admin" or "tech_admin".
+// Unlike `adminProcedure`, this deliberately EXCLUDES "general_agent" (and
+// every other role): per an explicit product requirement, only "المسؤول"
+// and "المدير التقني" may view or send the mass-email ("بريد جماعي") feature.
+const broadcastProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "admin" && ctx.user.role !== "tech_admin") {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
   return next({ ctx });
@@ -1329,6 +1341,181 @@ export const appRouter = router({
             message: "فشل تحميل الصورة",
           });
         }
+      }),
+  }),
+
+  // ── بريد جماعي (Broadcast email) — admin/tech_admin only ───────────────────
+  // Lets "المسؤول" أو "المدير التقني" compose one message and send it by
+  // email to: everyone, members with specific role(s), or a hand-picked set
+  // of members — with optional links and/or files attached as clickable
+  // items inside the email body (never as raw SMTP attachments).
+  broadcastEmail: router({
+    // Minimal member directory for the recipient picker (role + reference
+    // number + whether they even have an email on file). Gated the same as
+    // `send` below — general_agent/supervisor/etc never see this data via
+    // this feature, even though they can see the fuller list elsewhere.
+    listRecipients: broadcastProcedure.query(async () => {
+      const allUsers = await getUsers();
+      return allUsers
+        .filter((u) => u.approvalStatus === "approved")
+        .map((u) => ({
+          id: u.id,
+          name: u.arabicFullName || u.name || `عضو #${u.id}`,
+          email: u.email,
+          role: u.role,
+          referenceNumber: u.referenceNumber,
+        }));
+    }),
+
+    // Generic small-file upload for the composer ("روابط او ملفات" —
+    // optional). Restricted to a safe allow-list of mime types and verified
+    // by magic bytes where feasible, mirroring `upload.image` /
+    // `attachments.upload` above. Files are stored in the same object
+    // storage and referenced by URL inside the email — never sent as raw
+    // SMTP attachments (better deliverability, and keeps message size low).
+    uploadFile: broadcastProcedure
+      .input(
+        z.object({
+          filename: z.string().min(1).max(255),
+          base64: z.string().max(20 * 1024 * 1024),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const ALLOWED_MIME_VALIDATORS: Record<string, (buf: Buffer) => boolean> = {
+          "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+          "image/png": (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+          "image/webp": (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP",
+          "image/gif": (b) => b.subarray(0, 6).toString("latin1") === "GIF87a" || b.subarray(0, 6).toString("latin1") === "GIF89a",
+          "application/pdf": (b) => b.subarray(0, 5).toString("latin1") === "%PDF-",
+          "application/zip": (b) => b.subarray(0, 2).toString("latin1") === "PK",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (b) => b.subarray(0, 2).toString("latin1") === "PK",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": (b) => b.subarray(0, 2).toString("latin1") === "PK",
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation": (b) => b.subarray(0, 2).toString("latin1") === "PK",
+          "text/plain": () => true,
+        };
+        try {
+          const match = /^data:([^;]+);base64,(.*)$/.exec(input.base64);
+          const mimeType = match?.[1]?.toLowerCase();
+          const validate = mimeType ? ALLOWED_MIME_VALIDATORS[mimeType] : undefined;
+          if (!mimeType || !validate) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "نوع الملف غير مدعوم" });
+          }
+          const encoded = match?.[2] ?? input.base64;
+          const buffer = Buffer.from(encoded, "base64");
+          if (!validate(buffer)) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "محتوى الملف لا يطابق نوعه المعلن" });
+          }
+          const { storagePut } = await import("./storage.js");
+          const safeName = input.filename.replace(/[^A-Za-z0-9._\u0600-\u06FF-]/g, "_").slice(-200);
+          const { url, key } = await storagePut(`broadcast/${Date.now()}-${safeName}`, buffer, mimeType);
+          return { url, key, name: input.filename };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          console.error("[broadcastEmail.uploadFile] failed", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "فشل رفع الملف" });
+        }
+      }),
+
+    send: broadcastProcedure
+      .input(
+        z.object({
+          subject: z.string().min(1, "يرجى كتابة عنوان الرسالة").max(255),
+          message: z.string().min(1, "يرجى كتابة نص الرسالة").max(20000),
+          recipientMode: z.enum(["all", "roles", "specific"]),
+          roles: z
+            .array(z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"]))
+            .optional(),
+          userIds: z.array(z.number()).optional(),
+          // Optional extras — never required to send a message.
+          links: z.array(z.string().url().max(1000)).max(10).optional(),
+          files: z.array(z.object({ name: z.string().min(1).max(255), url: z.string().url() })).max(10).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const allUsers = await getUsers();
+        // Only approved members who actually have an email on file can
+        // ever receive mail — this mirrors every other email path in the
+        // project (activities/articles/achievements notifications).
+        const eligible = allUsers.filter((u) => u.approvalStatus === "approved" && !!u.email);
+
+        let recipients: typeof eligible = [];
+        if (input.recipientMode === "all") {
+          recipients = eligible;
+        } else if (input.recipientMode === "roles") {
+          const roles = new Set<string>(input.roles ?? []);
+          if (roles.size === 0) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "يرجى تحديد صلاحية واحدة على الأقل" });
+          }
+          recipients = eligible.filter((u) => roles.has(u.role));
+        } else {
+          const ids = new Set(input.userIds ?? []);
+          if (ids.size === 0) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "يرجى اختيار عضو واحد على الأقل" });
+          }
+          recipients = eligible.filter((u) => ids.has(u.id));
+        }
+
+        // Hard floor: at least one recipient, no matter which mode was used.
+        if (recipients.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "لا يوجد أي مستلم يطابق المعايير المحددة (بريد إلكتروني مسجل + عضوية مقبولة) — يجب اختيار مستلم واحد على الأقل",
+          });
+        }
+
+        const roleLabels: Record<string, string> = {
+          user: "عضو",
+          admin: "المسؤول",
+          general_agent: "الوكيل العام",
+          tech_admin: "المدير التقني",
+          supervisor: "المشرف",
+          committee_head: "مشرف فريق",
+        };
+
+        // Turn plain-text paragraphs (blank-line separated) into simple,
+        // safe HTML — the composer is a plain textarea, never raw HTML.
+        const escapeHtml = (s: string) =>
+          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const bodyHtml = input.message
+          .split(/\n{2,}/)
+          .map((para) => `<p style="margin:0 0 12px;">${escapeHtml(para).replace(/\n/g, "<br/>")}</p>`)
+          .join("");
+
+        const { sent, skipped } = await sendPersonalizedBulkEmail(
+          recipients.map((r) => ({ email: r.email, name: r.arabicFullName || r.name })),
+          input.subject,
+          (r) =>
+            broadcastEmailTemplate({
+              recipientName: r.name || "عضو النادي",
+              subject: input.subject,
+              bodyHtml,
+              senderName: ctx.user.name || roleLabels[ctx.user.role] || "إدارة النادي",
+              senderRoleLabel: roleLabels[ctx.user.role] || ctx.user.role,
+              links: input.links,
+              files: input.files,
+            }),
+          EmailPriority.ADMIN_BROADCAST
+        );
+
+        recordWorkLog({
+          ctx,
+          scope: "elevated",
+          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
+          action: "broadcast_email.send",
+          description: `قام ${ctx.user.name || "مستخدم"} بإرسال رسالة جماعية بعنوان "${input.subject}" إلى ${recipients.length} مستلم`,
+          entityType: "broadcastEmail",
+          metadata: {
+            recipientMode: input.recipientMode,
+            recipientCount: recipients.length,
+            sent,
+            skipped,
+            roles: input.roles,
+            hasLinks: !!input.links?.length,
+            hasFiles: !!input.files?.length,
+          },
+        });
+
+        return { recipientCount: recipients.length, sent, skipped };
       }),
   }),
 

@@ -45,6 +45,7 @@ const TeamInviteAccept = lazy(() => import("./pages/TeamInviteAccept"));
 const AdminRegistrationRequests = lazy(() => import("./pages/AdminRegistrationRequests"));
 const AdminProfileEditRequests = lazy(() => import("./pages/AdminProfileEditRequests"));
 const AdminWorkLogs = lazy(() => import("./pages/AdminWorkLogs"));
+const AdminBroadcastEmail = lazy(() => import("./pages/AdminBroadcastEmail"));
 const OnboardingForm = lazy(() =>
   import("./pages/OnboardingForm").then((m) => ({ default: m.OnboardingForm }))
 );
@@ -106,6 +107,7 @@ function Router() {
         <Route path={"/admin/registration-requests"} component={AdminRegistrationRequests} />
         <Route path={"/admin/profile-edit-requests"} component={AdminProfileEditRequests} />
         <Route path={"/admin/work-logs"} component={AdminWorkLogs} />
+        <Route path={"/admin/broadcast-email"} component={AdminBroadcastEmail} />
         <Route path={"/admin/registration-settings"} component={RegistrationSettings} />
         <Route path={"/admin/activities/:id/registrations"} component={AdminActivityRegistrations} />
         <Route path={"/admin/basir-settings"} component={AdminBasirSettings} />

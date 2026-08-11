@@ -248,6 +248,14 @@ export default function AdminDashboard() {
                   نظام الاجتماعات الإلكتروني
                 </Button>
               </Link>
+              {(user?.role === "admin" || user?.role === "tech_admin") && (
+                <Link href="/admin/broadcast-email">
+                  <Button variant="outline" className="w-full flex items-center justify-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    بريد جماعي
+                  </Button>
+                </Link>
+              )}
               {user?.role === "tech_admin" && (
                 <Link href="/admin/work-logs">
                   <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-rose-300 text-rose-700 hover:bg-rose-50">

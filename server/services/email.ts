@@ -34,6 +34,7 @@ function getTransporter(): nodemailer.Transporter | null {
  * later that same day.
  */
 export enum EmailPriority {
+  ADMIN_BROADCAST = 0, // رسالة جماعية يرسلها المسؤول/المدير التقني عمداً
   ACTIVITY = 1, // نشر نشاط + قبول في نشاط (عضو أو ضيف)
   ACHIEVEMENT = 2,
   ARTICLE = 3,
@@ -45,6 +46,7 @@ const MAX_DAILY_EMAILS = 290; // small safety buffer under Brevo's 300/day cap
 // send. Tier 1 (activity) can always use the full quota; each lower tier
 // gives up more headroom to protect the tiers above it.
 const RESERVE_BEFORE_TIER: Record<EmailPriority, number> = {
+  [EmailPriority.ADMIN_BROADCAST]: 0,
   [EmailPriority.ACTIVITY]: 0,
   [EmailPriority.ACHIEVEMENT]: 60,
   [EmailPriority.ARTICLE]: 100,
@@ -108,6 +110,33 @@ export async function sendBulkEmail(
     }
     await sendEmail(r.email, subject, html, priority);
   }
+}
+
+/** Same delivery/quota semantics as `sendBulkEmail`, but calls `buildHtml`
+ * per-recipient so each message can be personalized (e.g. greeting the
+ * recipient by name) instead of sending one identical HTML body to
+ * everyone. Used by the admin "بريد جماعي" (broadcast) feature. */
+export async function sendPersonalizedBulkEmail(
+  recipients: { email: string | null; name?: string | null }[],
+  subject: string,
+  buildHtml: (recipient: { email: string; name?: string | null }) => string,
+  priority: EmailPriority = EmailPriority.ADMIN_BROADCAST
+): Promise<{ sent: number; skipped: number }> {
+  const t = getTransporter();
+  if (!t) return { sent: 0, skipped: recipients.length };
+  const targets = recipients.filter((r): r is { email: string; name?: string | null } => !!r.email);
+  let sent = 0;
+  for (const r of targets) {
+    if (!(await hasQuota(priority))) {
+      console.warn(
+        `[Email] Daily quota reached for priority tier ${EmailPriority[priority]} — stopping bulk send early.`
+      );
+      break;
+    }
+    await sendEmail(r.email, subject, buildHtml(r), priority);
+    sent += 1;
+  }
+  return { sent, skipped: targets.length - sent };
 }
 
 /** Truncates plain text to a fixed number of words, appending "…" if cut. */
@@ -262,5 +291,70 @@ export function activityAcceptanceEmailTemplate(params: {
     ${ctaButton(url, "لعرض تفاصيل النشاط يرجى الانتقال إلى الرابط التالي")}
     <div style="padding:0 24px 28px;"></div>
     <p style="text-align:center;font-size:12px;color:#8a8a8a;margin:0 0 20px;">${CLUB_NAME}</p>
+  `);
+}
+
+// ── رسالة جماعية من إدارة النادي (يرسلها المسؤول/المدير التقني) ────────────
+export function broadcastEmailTemplate(params: {
+  recipientName: string;
+  subject: string;
+  bodyHtml: string;
+  senderName: string;
+  senderRoleLabel: string;
+  links?: string[];
+  files?: { name: string; url: string }[];
+}): string {
+  const linksSection =
+    params.links && params.links.length > 0
+      ? `
+    <div style="padding:4px 24px 0;">
+      <p style="font-size:12px;color:#8a8a8a;margin:18px 0 8px;text-align:${"center"};">روابط مرفقة</p>
+      ${params.links
+        .map(
+          (l) => `
+        <div style="text-align:center;margin-bottom:8px;">
+          <a href="${l}" dir="ltr" style="display:inline-block;font-size:13px;color:#8a6d3b;text-decoration:underline;word-break:break-all;">${l}</a>
+        </div>`
+        )
+        .join("")}
+    </div>`
+      : "";
+
+  const filesSection =
+    params.files && params.files.length > 0
+      ? `
+    <div style="padding:4px 24px 0;">
+      <p style="font-size:12px;color:#8a8a8a;margin:18px 0 8px;text-align:center;">ملفات مرفقة</p>
+      ${params.files
+        .map(
+          (f) => `
+        <div style="text-align:center;margin-bottom:10px;">
+          <a href="${f.url}" style="display:inline-flex;align-items:center;gap:6px;background:#faf8f3;border:1px solid #e6e1d6;
+            color:#5a4a2e;text-decoration:none;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:600;">
+            📎 ${f.name}
+          </a>
+        </div>`
+        )
+        .join("")}
+    </div>`
+      : "";
+
+  return shell(`
+    <div style="padding:36px 24px 8px;text-align:center;">
+      <div style="width:56px;height:56px;border-radius:50%;background:#eef1fb;display:flex;align-items:center;
+        justify-content:center;margin:0 auto 16px;font-size:26px;">✉️</div>
+      <p style="letter-spacing:1px;font-size:11px;color:#8a6d3b;margin:0 0 8px;">${CLUB_NAME}</p>
+      <h1 style="margin:0;font-size:19px;color:#2b2b2b;line-height:1.6;">${params.subject}</h1>
+    </div>
+    <div style="padding:6px 24px 4px;">
+      <p style="font-size:14px;color:#3d3d3d;margin:14px 0 4px;">مرحباً ${params.recipientName}،</p>
+      <div style="font-size:14px;color:#444;line-height:2;margin:10px 0;text-align:right;">${params.bodyHtml}</div>
+    </div>
+    ${linksSection}
+    ${filesSection}
+    <div style="padding:24px 24px 8px;text-align:center;border-top:1px solid #eee;margin-top:20px;">
+      <p style="margin:0;font-size:12px;color:#8a8a8a;">أُرسلت هذه الرسالة بواسطة ${params.senderName} (${params.senderRoleLabel})</p>
+    </div>
+    <div style="padding:0 24px 24px;"></div>
   `);
 }
