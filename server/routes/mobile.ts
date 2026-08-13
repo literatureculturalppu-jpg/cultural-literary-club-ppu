@@ -1,13 +1,14 @@
 import crypto from "crypto";
 import type { Express, Request, Response } from "express";
 
-import { ONE_YEAR_MS } from "../../shared/const.js";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const.js";
 import * as db from "../db.js";
 import { getSessionCookieOptions } from "../_core/cookies.js";
 import { sdk } from "../_core/sdk.js";
 import { sendMobilePushToUsers } from "../services/mobilePush.js";
 
 const BASE = "/api/mobile/v1";
+const WEB_SESSION_HANDOFF = "club-webview-session";
 const CONTENT_KINDS = ["article", "activity", "achievement", "book"] as const;
 type ContentKind = (typeof CONTENT_KINDS)[number];
 
@@ -24,6 +25,9 @@ function queryString(value: unknown) { return typeof value === "string" ? value 
 function numeric(value: unknown) { const result = Number(value); return Number.isInteger(result) && result > 0 ? result : null; }
 function mobileCodeHash(code: string) { return crypto.createHash("sha256").update(code).digest("hex"); }
 function envelope(data: unknown) { return { apiVersion: "1.0", generatedAt: new Date().toISOString(), data }; }
+function safeWebsitePath(value: unknown) {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/api/") ? value.slice(0, 500) : "/";
+}
 
 function publicUser(user: NonNullable<Awaited<ReturnType<typeof db.getUserById>>>) {
   return { id: user.id, name: user.name, email: user.email, role: user.role, profileImage: user.profileImage, approved: user.approvalStatus === "approved" };
@@ -104,6 +108,28 @@ export function registerMobileRoutes(app: Express) {
     if (!user) { res.status(401).json({ message: "المستخدم غير موجود." }); return; }
     const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "عضو النادي", expiresInMs: ONE_YEAR_MS });
     res.json(envelope({ sessionToken, user: publicUser(user) }));
+  });
+
+  // The Android wrapper authenticates in the system browser, then uses this
+  // one-time handoff to create the website's regular HTTP-only cookie inside
+  // its WebView. The bearer token never appears in the WebView URL or page JS.
+  app.post(`${BASE}/auth/web-handoff`, async (req, res) => {
+    const user = await requireMobile(req, res); if (!user) return;
+    const handoff = crypto.randomBytes(32).toString("hex");
+    const returnPath = safeWebsitePath(req.body?.returnPath);
+    await db.createMobileAuthCode({ codeHash: mobileCodeHash(handoff), userId: user.id, redirectUri: WEB_SESSION_HANDOFF, expiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+    res.json(envelope({ url: `${BASE}/auth/web-session?code=${encodeURIComponent(handoff)}&returnPath=${encodeURIComponent(returnPath)}` }));
+  });
+
+  app.get(`${BASE}/auth/web-session`, async (req, res) => {
+    const code = queryString(req.query.code);
+    const handoff = code ? await db.consumeMobileAuthCode(mobileCodeHash(code)) : null;
+    if (!handoff || handoff.redirectUri !== WEB_SESSION_HANDOFF) { res.status(401).send("انتهت صلاحية فتح جلسة الموقع. أعد تسجيل الدخول."); return; }
+    const user = await db.getUserById(handoff.userId);
+    if (!user) { res.status(401).send("المستخدم غير موجود."); return; }
+    const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "عضو النادي", expiresInMs: ONE_YEAR_MS });
+    res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: ONE_YEAR_MS });
+    res.redirect(302, safeWebsitePath(req.query.returnPath));
   });
 
   app.get(`${BASE}/auth/me`, async (req, res) => {
