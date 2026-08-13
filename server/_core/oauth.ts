@@ -25,6 +25,19 @@ function getGoogleRedirectUri(req: Request): string {
   return `${proto}://${host}/api/auth/google/callback`;
 }
 
+function redirectMobileOAuthError(req: Request, res: Response, error: "no_account" | "registration_disabled") {
+  const mobileRedirect = getCookieValue(req, "mobile_oauth_redirect");
+  const mobileState = getCookieValue(req, "mobile_oauth_state");
+  if (!isAllowedRedirectUri(mobileRedirect)) return false;
+  res.clearCookie("mobile_oauth_redirect");
+  res.clearCookie("mobile_oauth_state");
+  const destination = new URL(mobileRedirect);
+  destination.searchParams.set("error", error);
+  if (typeof mobileState === "string") destination.searchParams.set("state", mobileState);
+  res.redirect(302, destination.toString());
+  return true;
+}
+
 export function registerOAuthRoutes(app: Express) {
   // Google OAuth: redirect to Google consent screen
   app.get("/api/auth/google", async (req: Request, res: Response) => {
@@ -38,6 +51,7 @@ export function registerOAuthRoutes(app: Express) {
     if (intent === "register") {
       const settings = await db.getRegistrationSettings();
       if (!settings.registrationEnabled) {
+        if (redirectMobileOAuthError(req, res, "registration_disabled")) return;
         res.redirect(302, "/login?error=registration_disabled");
         return;
       }
@@ -139,6 +153,7 @@ export function registerOAuthRoutes(app: Express) {
 
       if (intent === "login" && !existingUser) {
         // "تسجيل الدخول" must never silently create a new account.
+        if (redirectMobileOAuthError(req, res, "no_account")) return;
         res.redirect(302, "/login?error=no_account");
         return;
       }
@@ -148,6 +163,7 @@ export function registerOAuthRoutes(app: Express) {
         // mid-flow, or the entry check was bypassed by calling the callback directly).
         const settings = await db.getRegistrationSettings();
         if (!settings.registrationEnabled) {
+          if (redirectMobileOAuthError(req, res, "registration_disabled")) return;
           res.redirect(302, "/login?error=registration_disabled");
           return;
         }
