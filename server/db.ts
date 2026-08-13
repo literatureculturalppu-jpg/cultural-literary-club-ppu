@@ -1839,7 +1839,9 @@ export async function upsertMobileDevice(input: { userId: number; expoPushToken:
   if (!db) throw new Error("Database not available");
   const existing = await db.select().from(mobileDevices).where(eq(mobileDevices.expoPushToken, input.expoPushToken)).limit(1);
   if (existing[0]) {
-    await db.update(mobileDevices).set({ userId: input.userId, platform: input.platform }).where(eq(mobileDevices.id, existing[0].id));
+    if (existing[0].userId !== input.userId || existing[0].platform !== input.platform) {
+      await db.update(mobileDevices).set({ userId: input.userId, platform: input.platform }).where(eq(mobileDevices.id, existing[0].id));
+    }
     return existing[0].id;
   }
   const [created] = await db.insert(mobileDevices).values(input).returning({ id: mobileDevices.id });

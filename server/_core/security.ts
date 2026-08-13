@@ -26,7 +26,7 @@ export function securityHeaders(_req: Request, res: Response, next: NextFunction
  * Limits each IP to a fixed number of requests per window.
  */
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX = 60; // max requests per window
+const RATE_LIMIT_MAX = 120; // max requests per window
 
 const hitCounts = new Map<string, { count: number; resetAt: number }>();
 
@@ -54,7 +54,13 @@ export function rateLimiter(req: Request, res: Response, next: NextFunction) {
   res.setHeader("X-RateLimit-Remaining", String(Math.max(0, RATE_LIMIT_MAX - entry.count)));
 
   if (entry.count > RATE_LIMIT_MAX) {
-    res.status(429).json({ error: "Too many requests. Please try again later." });
+    const retryAfterSeconds = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    res.status(429).json({
+      error: "طلبات تسجيل الدخول كثيرة. انتظر قليلًا ثم حاول مجددًا.",
+      code: "rate_limited",
+      retryAfterSeconds,
+    });
     return;
   }
 

@@ -10,6 +10,7 @@ import { appRouter } from "../routers.js";
 import { createContext } from "./context.js";
 import { serveStatic, setupVite } from "./vite.js";
 import { sdk } from "./sdk.js";
+import * as db from "../db.js";
 import { sniffImageMagicBytes } from "../routers.js";
 import { storagePut } from "../storage.js";
 import { securityHeaders, rateLimiter } from "./security.js";
@@ -48,15 +49,14 @@ async function startServer() {
   // securityHeaders was defined in security.ts but never actually applied
   // anywhere — it just sets response headers, so it's safe app-wide.
   app.use(securityHeaders);
-  // rateLimiter was likewise defined but never wired in. It's scoped to
-  // `/api/auth` (OAuth login/callback) and `/api/upload` rather than the
+  // rateLimiter is scoped to `/api/auth` (OAuth login/callback) and
+  // `/api/upload` rather than the
   // whole app: tRPC alone can easily fire well over 60 requests in a single
   // 15-minute session of normal use (every query/mutation is one HTTP call),
   // so applying this limiter globally would lock legitimate users out of
   // the app almost immediately. Auth and upload endpoints are the actual
   // abuse-prone surface this was written to protect.
   app.use("/api/auth", rateLimiter);
-  app.use("/api/mobile/v1/auth", rateLimiter);
   app.use("/api/upload", rateLimiter);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
@@ -143,6 +143,11 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  // Mobile schema setup used to run as middleware for every mobile API
+  // request. Run it once during the server instance bootstrap instead so a
+  // public feed or an authenticated WebView handoff does not repeatedly pay
+  // for idempotent DDL checks.
+  await db.ensureMobileInfrastructure();
   registerMobileRoutes(app);
   // Basir's streaming chat endpoint — see server/routes/basirStream.ts.
   // Registered before the tRPC middleware, as a plain Express route, so it

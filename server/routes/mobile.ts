@@ -83,9 +83,9 @@ async function requireMobile(req: Request, res: Response) {
 function isAllowedSender(role: string) { return role === "admin" || role === "tech_admin"; }
 
 export function registerMobileRoutes(app: Express) {
-  app.use(BASE, async (_req, res, next) => {
-    try { await db.ensureMobileInfrastructure(); next(); }
-    catch (error) { console.error("[mobile] infrastructure setup failed", error); res.status(503).json({ message: "تعذر تجهيز خدمة الجوال. أعد المحاولة لاحقًا." }); }
+  app.use(`${BASE}/auth`, (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
   });
 
   app.get(`${BASE}/auth/google`, (req, res) => {
@@ -113,6 +113,10 @@ export function registerMobileRoutes(app: Express) {
       title: "تم تسجيل الدخول إلى التطبيق",
       body: "تم تسجيل الدخول إلى حسابك بنجاح.",
       url: "/profile",
+      // The active device posts this local notification after its first
+      // successful exchange. Avoid racing a remote push before a first-time
+      // device has registered, and avoid showing the same login alert twice.
+      push: false,
     });
     res.json(envelope({ sessionToken, user: publicUser(user) }));
   });

@@ -119,7 +119,7 @@ export async function notifyActivityApproval(userId: number, activityTitle: stri
  * for the same user. Text remains safe for lock-screen preview. */
 export async function notifyUserEvent(
   userId: number,
-  params: { entityId: number; title: string; body?: string | null; url: string; type?: "activity" | "team_chat" | "team_request" }
+  params: { entityId: number; title: string; body?: string | null; url: string; type?: "activity" | "team_chat" | "team_request"; push?: boolean }
 ): Promise<void> {
   try {
     await db.createNotificationsForUsers([userId], {
@@ -129,11 +129,13 @@ export async function notifyUserEvent(
       body: params.body ?? null,
       url: params.url,
     });
-    void sendMobilePushToUsers([userId], {
-      title: params.title,
-      body: params.body ?? "لديك تحديث جديد في حسابك.",
-      data: { url: params.url, type: params.type ?? "user_event", entityId: params.entityId, private: true },
-    });
+    if (params.push !== false) {
+      void sendMobilePushToUsers([userId], {
+        title: params.title,
+        body: params.body ?? "لديك تحديث جديد في حسابك.",
+        data: { url: params.url, type: params.type ?? "user_event", entityId: params.entityId, private: true },
+      });
+    }
   } catch (error) {
     console.error("[notify] Failed to deliver private user event:", error);
   }
