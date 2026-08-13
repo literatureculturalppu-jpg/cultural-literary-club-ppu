@@ -25,15 +25,42 @@ function getGoogleRedirectUri(req: Request): string {
   return `${proto}://${host}/api/auth/google/callback`;
 }
 
-function redirectMobileOAuthError(req: Request, res: Response, error: "no_account" | "registration_disabled") {
+type MobileOAuthState = { redirectUri: string; state?: string; expiresAt: number };
+
+function createMobileOAuthState(value: MobileOAuthState) {
+  const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
+  const signature = crypto.createHmac("sha256", ENV.cookieSecret).update(payload).digest("base64url");
+  return payload + "." + signature;
+}
+
+function getMobileOAuthState(value: string | undefined): MobileOAuthState | null {
+  const parts = value?.split(".") || [];
+  const payload = parts[0];
+  const signature = parts[1];
+  if (!payload || !signature || parts.length !== 2) return null;
+  const expected = crypto.createHmac("sha256", ENV.cookieSecret).update(payload).digest("base64url");
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as MobileOAuthState;
+    return isAllowedRedirectUri(decoded.redirectUri) && Number.isFinite(decoded.expiresAt) && decoded.expiresAt > Date.now() ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function redirectMobileOAuthError(req: Request, res: Response, error: "no_account" | "registration_disabled", signedState: MobileOAuthState | null = null) {
   const mobileRedirect = getCookieValue(req, "mobile_oauth_redirect");
   const mobileState = getCookieValue(req, "mobile_oauth_state");
-  if (!isAllowedRedirectUri(mobileRedirect)) return false;
+  const redirectUri = isAllowedRedirectUri(mobileRedirect) ? mobileRedirect : signedState?.redirectUri;
+  const returnState = typeof mobileState === "string" ? mobileState : signedState?.state;
+  if (!isAllowedRedirectUri(redirectUri)) return false;
   res.clearCookie("mobile_oauth_redirect");
   res.clearCookie("mobile_oauth_state");
-  const destination = new URL(mobileRedirect);
+  const destination = new URL(redirectUri);
   destination.searchParams.set("error", error);
-  if (typeof mobileState === "string") destination.searchParams.set("state", mobileState);
+  if (typeof returnState === "string") destination.searchParams.set("state", returnState);
   res.redirect(302, destination.toString());
   return true;
 }
@@ -45,19 +72,25 @@ export function registerOAuthRoutes(app: Express) {
     // "register" = only allow creating brand-new accounts (blocked if registration is disabled).
     const rawIntent = getQueryParam(req, "intent");
     const intent = rawIntent === "register" ? "register" : "login";
+    const mobileRedirect = getCookieValue(req, "mobile_oauth_redirect");
+    const mobileState = getCookieValue(req, "mobile_oauth_state");
+    const mobilePayload = isAllowedRedirectUri(mobileRedirect)
+      ? { redirectUri: mobileRedirect, state: mobileState, expiresAt: Date.now() + 10 * 60 * 1000 }
+      : null;
 
     // If someone is trying to create a new account while registration is
     // disabled by the club admin, stop them before they even reach Google.
     if (intent === "register") {
       const settings = await db.getRegistrationSettings();
       if (!settings.registrationEnabled) {
+        if (redirectMobileOAuthError(req, res, "registration_disabled", mobilePayload)) return;
         res.redirect(302, "/login?error=registration_disabled");
         return;
       }
     }
 
     const redirectUri = getGoogleRedirectUri(req);
-    const state = crypto.randomBytes(32).toString("hex");
+    const state = mobilePayload ? createMobileOAuthState(mobilePayload) : crypto.randomBytes(32).toString("hex");
     const cookieOptions = getSessionCookieOptions(req);
     res.cookie("oauth_state", state, { ...cookieOptions, maxAge: 10 * 60 * 1000 });
     res.cookie("oauth_intent", intent, { ...cookieOptions, maxAge: 10 * 60 * 1000 });
@@ -81,10 +114,11 @@ export function registerOAuthRoutes(app: Express) {
       return;
     }
 
-    // CSRF protection: verify state parameter
+    // CSRF protection: verify cookie state for web and signed state for Android.
     const cookieState = req.cookies?.oauth_state ||
       (req.headers.cookie?.split("; ").find(c => c.startsWith("oauth_state="))?.split("=")[1]);
-    if (!state || !cookieState || state !== cookieState) {
+    const signedMobileState = getMobileOAuthState(state);
+    if (!state || (!signedMobileState && (!cookieState || state !== cookieState))) {
       res.status(403).json({ error: "Invalid OAuth state" });
       return;
     }
@@ -152,7 +186,7 @@ export function registerOAuthRoutes(app: Express) {
 
       if (intent === "login" && !existingUser) {
         // "تسجيل الدخول" must never silently create a new account.
-        if (redirectMobileOAuthError(req, res, "no_account")) return;
+        if (redirectMobileOAuthError(req, res, "no_account", signedMobileState)) return;
         res.redirect(302, "/login?error=no_account");
         return;
       }
@@ -162,7 +196,7 @@ export function registerOAuthRoutes(app: Express) {
         // mid-flow, or the entry check was bypassed by calling the callback directly).
         const settings = await db.getRegistrationSettings();
         if (!settings.registrationEnabled) {
-          if (redirectMobileOAuthError(req, res, "registration_disabled")) return;
+          if (redirectMobileOAuthError(req, res, "registration_disabled", signedMobileState)) return;
           res.redirect(302, "/login?error=registration_disabled");
           return;
         }
@@ -186,16 +220,19 @@ export function registerOAuthRoutes(app: Express) {
 
       const mobileRedirect = getCookieValue(req, "mobile_oauth_redirect");
       const mobileState = getCookieValue(req, "mobile_oauth_state");
-      if (isAllowedRedirectUri(mobileRedirect)) {
+      const mobilePayload = signedMobileState || (isAllowedRedirectUri(mobileRedirect)
+        ? { redirectUri: mobileRedirect, state: mobileState, expiresAt: Date.now() }
+        : null);
+      if (mobilePayload) {
         const user = await db.getUserByOpenId(openId);
         if (!user) { res.status(500).json({ error: "Mobile user record missing" }); return; }
         const handoff = crypto.randomBytes(32).toString("hex");
-        await db.createMobileAuthCode({ codeHash: mobileCodeHash(handoff), userId: user.id, redirectUri: mobileRedirect, expiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+        await db.createMobileAuthCode({ codeHash: mobileCodeHash(handoff), userId: user.id, redirectUri: mobilePayload.redirectUri, expiresAt: new Date(Date.now() + 5 * 60 * 1000) });
         res.clearCookie("mobile_oauth_redirect");
         res.clearCookie("mobile_oauth_state");
-        const destination = new URL(mobileRedirect);
+        const destination = new URL(mobilePayload.redirectUri);
         destination.searchParams.set("code", handoff);
-        if (typeof mobileState === "string") destination.searchParams.set("state", mobileState);
+        if (typeof mobilePayload.state === "string") destination.searchParams.set("state", mobilePayload.state);
         res.redirect(302, destination.toString());
         return;
       }
