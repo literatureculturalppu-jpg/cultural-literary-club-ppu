@@ -1,5 +1,6 @@
 import * as db from "../db.js";
 import { sendBulkEmail, activityEmailTemplate, articleEmailTemplate, achievementEmailTemplate, sendEmail, bookEmailTemplate, activityAcceptanceEmailTemplate, EmailPriority } from "./email.js";
+import { sendMobilePushToUsers } from "./mobilePush.js";
 
 interface NotifyContentCreatedParams {
   type: "activity" | "article" | "achievement";
@@ -38,6 +39,12 @@ export async function notifyContentCreated(params: NotifyContentCreatedParams): 
         url: params.relativeUrl,
       }
     );
+
+    void sendMobilePushToUsers(recipients.map((recipient) => recipient.id), {
+      title: notificationTitle,
+      body: params.excerpt,
+      data: { url: params.relativeUrl, type: params.type, entityId: params.entityId },
+    });
 
     console.log(`[notify] Sent ${recipients.length} notifications for ${params.type} "${params.title}"`);
 
@@ -136,13 +143,24 @@ export async function notifyGuestActivityApproval(
   }
 }
 
-/** Book creation isn't part of the shared content-notification enum (no
- * in-app notification type for it yet), so it gets its own light-weight
- * email-only notifier. */
-export async function notifyBookCreated(bookTitle: string, author: string, excludeUserId: number): Promise<void> {
+/** Book publication gets the same notification treatment as other content. */
+export async function notifyBookCreated(bookId: number, bookTitle: string, author: string, excludeUserId: number): Promise<void> {
   try {
     const recipients = await db.getContentNotificationRecipients(excludeUserId);
     if (recipients.length === 0) return;
+    const title = `تم إضافة كتاب بعنوان: ${bookTitle}`;
+    await db.createNotificationsForUsers(recipients.map((recipient) => recipient.id), {
+      type: "book",
+      entityId: bookId,
+      title,
+      body: author,
+      url: `/books/${bookId}`,
+    });
+    void sendMobilePushToUsers(recipients.map((recipient) => recipient.id), {
+      title,
+      body: author,
+      data: { url: `/books/${bookId}`, type: "book", entityId: bookId },
+    });
     await sendBulkEmail(recipients, `كتاب جديد: ${bookTitle}`, bookEmailTemplate({ bookTitle, author }), EmailPriority.BOOK);
   } catch (error) {
     console.error("[notify] Failed to email new-book notification:", error);

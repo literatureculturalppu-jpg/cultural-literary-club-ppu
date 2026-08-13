@@ -14,6 +14,7 @@ import { sniffImageMagicBytes } from "../routers.js";
 import { storagePut } from "../storage.js";
 import { securityHeaders, rateLimiter } from "./security.js";
 import { registerBasirStreamRoute } from "../routes/basirStream.js";
+import { registerMobileRoutes } from "../routes/mobile.js";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -55,6 +56,7 @@ async function startServer() {
   // the app almost immediately. Auth and upload endpoints are the actual
   // abuse-prone surface this was written to protect.
   app.use("/api/auth", rateLimiter);
+  app.use("/api/mobile/v1/auth", rateLimiter);
   app.use("/api/upload", rateLimiter);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
@@ -141,6 +143,7 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+  registerMobileRoutes(app);
   // Basir's streaming chat endpoint — see server/routes/basirStream.ts.
   // Registered before the tRPC middleware, as a plain Express route, so it
   // can flush partial output to the client as it's generated.

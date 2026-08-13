@@ -5,10 +5,17 @@ import { getSessionCookieOptions } from "./cookies.js";
 import { sdk } from "./sdk.js";
 import { ENV } from "./env.js";
 import crypto from "crypto";
+import { isAllowedRedirectUri, mobileCodeHash } from "../routes/mobile.js";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
   return typeof value === "string" ? value : undefined;
+}
+
+function getCookieValue(req: Request, key: string): string | undefined {
+  const raw = req.cookies?.[key] || req.headers.cookie?.split("; ").find(c => c.startsWith(`${key}=`))?.split("=").slice(1).join("=");
+  if (typeof raw !== "string") return undefined;
+  try { return decodeURIComponent(raw); } catch { return undefined; }
 }
 
 function getGoogleRedirectUri(req: Request): string {
@@ -161,6 +168,22 @@ export function registerOAuthRoutes(app: Express) {
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+      const mobileRedirect = getCookieValue(req, "mobile_oauth_redirect");
+      const mobileState = getCookieValue(req, "mobile_oauth_state");
+      if (isAllowedRedirectUri(mobileRedirect)) {
+        const user = await db.getUserByOpenId(openId);
+        if (!user) { res.status(500).json({ error: "Mobile user record missing" }); return; }
+        const handoff = crypto.randomBytes(32).toString("hex");
+        await db.createMobileAuthCode({ codeHash: mobileCodeHash(handoff), userId: user.id, redirectUri: mobileRedirect, expiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+        res.clearCookie("mobile_oauth_redirect");
+        res.clearCookie("mobile_oauth_state");
+        const destination = new URL(mobileRedirect);
+        destination.searchParams.set("code", handoff);
+        if (typeof mobileState === "string") destination.searchParams.set("state", mobileState);
+        res.redirect(302, destination.toString());
+        return;
+      }
 
       const destination = intent === "register" && existingUser ? "/?notice=already_registered" : "/";
       res.redirect(302, destination);

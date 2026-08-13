@@ -1041,7 +1041,7 @@ export const appRouter = router({
           createdBy: ctx.user.id,
         });
         try {
-          await notifyBookCreated(input.title, input.author, ctx.user.id);
+          await notifyBookCreated(book.id, input.title, input.author, ctx.user.id);
         } catch (err) {
           console.warn("[books.create] notifyBookCreated failed:", err);
         }

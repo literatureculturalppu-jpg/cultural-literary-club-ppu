@@ -7,7 +7,7 @@ export const activityStatusEnum = pgEnum("activity_status", ["upcoming", "ongoin
 export const memberStatusEnum = pgEnum("member_status", ["active", "inactive"]);
 export const attachmentEntityTypeEnum = pgEnum("attachment_entity_type", ["article", "activity"]);
 export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected"]);
-export const notificationTypeEnum = pgEnum("notification_type", ["article", "activity", "achievement", "team_chat", "team_request"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["article", "activity", "achievement", "book", "announcement", "team_chat", "team_request"]);
 export const bookVoteModeEnum = pgEnum("book_vote_mode", ["single", "multiple"]);
 export const bookVoteStatusEnum = pgEnum("book_vote_status", ["open", "closed"]);
 export const teamActionTypeEnum = pgEnum("team_action_type", [
@@ -424,6 +424,33 @@ export const notifications = pgTable("notifications", {
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+/** Registered Expo devices belonging to a signed-in club user. Tokens are
+ * public device addresses, but are stored server-side and never returned by
+ * the mobile contract. */
+export const mobileDevices = pgTable("mobileDevices", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  expoPushToken: varchar("expoPushToken", { length: 255 }).notNull().unique(),
+  platform: varchar("platform", { length: 24 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type MobileDevice = typeof mobileDevices.$inferSelect;
+export type InsertMobileDevice = typeof mobileDevices.$inferInsert;
+
+/** One-time, short-lived OAuth hand-off codes. The native app exchanges the
+ * opaque code for a signed session token; tokens never appear in a URL. */
+export const mobileAuthCodes = pgTable("mobileAuthCodes", {
+  id: serial("id").primaryKey(),
+  codeHash: varchar("codeHash", { length: 128 }).notNull().unique(),
+  userId: integer("userId").notNull(),
+  redirectUri: varchar("redirectUri", { length: 500 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type MobileAuthCode = typeof mobileAuthCodes.$inferSelect;
+export type InsertMobileAuthCode = typeof mobileAuthCodes.$inferInsert;
 
 /**
  * AI (Basir) settings – single-row configuration table.

@@ -7,6 +7,7 @@ import { runScheduledBookCleanup, runScheduledWorkLogsCleanup } from "../server/
 import { runScheduledMeetingsCleanup, autoEndEmptyLiveMeetings } from "../server/services/meetingsDb.js";
 import { securityHeaders, rateLimiter } from "../server/_core/security.js";
 import { registerBasirStreamRoute } from "../server/routes/basirStream.js";
+import { registerMobileRoutes } from "../server/routes/mobile.js";
 
 const app = express();
 // Vercel's edge always sits in front of this function, so `req.ip` is
@@ -20,6 +21,7 @@ app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(express.json({ limit: "50mb" }));
 registerOAuthRoutes(app);
+registerMobileRoutes(app);
 
 // Daily scheduled cleanup for the "الكتب" page: deletes closed suggestion
 // rounds / vote polls once their grace period (5 / 7 days) has passed.

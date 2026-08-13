@@ -57,11 +57,14 @@ import {
   type InsertProfileEditRequest,
   workLogs,
   type InsertWorkLog,
+  mobileDevices,
+  mobileAuthCodes,
 } from "../drizzle/schema.js";
 import { ENV, isProtectedAdminEmail, isTechAdminEmail } from './_core/env.js';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
+let mobileInfrastructurePromise: Promise<void> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 // Uses a `pg` Pool explicitly (rather than passing a bare connection string to
@@ -85,6 +88,45 @@ export async function getDb() {
     }
   }
   return _db;
+}
+
+/**
+ * Applies the small, idempotent mobile-only schema extension on first use.
+ * The repository includes the equivalent SQL migration as an audit artifact,
+ * while this guard lets the Vercel deployment apply it automatically with the
+ * already configured DATABASE_URL instead of requiring an administrator to
+ * run a separate command.
+ */
+export async function ensureMobileInfrastructure() {
+  if (mobileInfrastructurePromise) return mobileInfrastructurePromise;
+  mobileInfrastructurePromise = (async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db.execute(sql.raw(`ALTER TYPE "notification_type" ADD VALUE IF NOT EXISTS 'book'`));
+    await db.execute(sql.raw(`ALTER TYPE "notification_type" ADD VALUE IF NOT EXISTS 'announcement'`));
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS "mobileDevices" (
+      "id" serial PRIMARY KEY,
+      "userId" integer NOT NULL,
+      "expoPushToken" varchar(255) NOT NULL UNIQUE,
+      "platform" varchar(24) NOT NULL,
+      "createdAt" timestamp DEFAULT now() NOT NULL,
+      "updatedAt" timestamp DEFAULT now() NOT NULL
+    )`));
+    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS "mobileDevices_userId_idx" ON "mobileDevices" ("userId")`));
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS "mobileAuthCodes" (
+      "id" serial PRIMARY KEY,
+      "codeHash" varchar(128) NOT NULL UNIQUE,
+      "userId" integer NOT NULL,
+      "redirectUri" varchar(500) NOT NULL,
+      "expiresAt" timestamp NOT NULL,
+      "createdAt" timestamp DEFAULT now() NOT NULL
+    )`));
+    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS "mobileAuthCodes_expiresAt_idx" ON "mobileAuthCodes" ("expiresAt")`));
+  })().catch((error) => {
+    mobileInfrastructurePromise = null;
+    throw error;
+  });
+  return mobileInfrastructurePromise;
 }
 
 /**
@@ -1768,6 +1810,60 @@ export async function markAllNotificationsRead(userId: number) {
     .update(notifications)
     .set({ isRead: true })
     .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+}
+
+// ---------------------------------------------------------------------------
+// Mobile application sessions and Expo device registration
+// ---------------------------------------------------------------------------
+
+export async function createMobileAuthCode(input: { codeHash: string; userId: number; redirectUri: string; expiresAt: Date }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(mobileAuthCodes).values(input);
+}
+
+/** Consumes the hand-off record irrespective of expiry so an opaque code can
+ * never be replayed. */
+export async function consumeMobileAuthCode(codeHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const rows = await db.select().from(mobileAuthCodes).where(eq(mobileAuthCodes.codeHash, codeHash)).limit(1);
+  const record = rows[0] ?? null;
+  if (record) await db.delete(mobileAuthCodes).where(eq(mobileAuthCodes.id, record.id));
+  if (!record || record.expiresAt.getTime() <= Date.now()) return null;
+  return record;
+}
+
+export async function upsertMobileDevice(input: { userId: number; expoPushToken: string; platform: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db.select().from(mobileDevices).where(eq(mobileDevices.expoPushToken, input.expoPushToken)).limit(1);
+  if (existing[0]) {
+    await db.update(mobileDevices).set({ userId: input.userId, platform: input.platform }).where(eq(mobileDevices.id, existing[0].id));
+    return existing[0].id;
+  }
+  const [created] = await db.insert(mobileDevices).values(input).returning({ id: mobileDevices.id });
+  return created.id;
+}
+
+export async function getMobileDevicesForUsers(userIds: number[]) {
+  if (userIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(mobileDevices).where(inArray(mobileDevices.userId, userIds));
+}
+
+export async function deleteMobileDeviceByToken(expoPushToken: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(mobileDevices).where(eq(mobileDevices.expoPushToken, expoPushToken));
+}
+
+export async function getMobileNotificationRecipients(target: "all" | "members" = "all") {
+  const db = await getDb();
+  if (!db) return [];
+  const recipients = await db.select({ id: users.id, approvalStatus: users.approvalStatus }).from(users).where(eq(users.onboardingCompleted, true));
+  return target === "members" ? recipients.filter((user) => user.approvalStatus === "approved") : recipients;
 }
 
 // ── AI (Basir) Settings ─────────────────────────────────────────────
