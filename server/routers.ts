@@ -167,7 +167,7 @@ import {
 } from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
 import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
-import { notifyContentCreated, notifyActivityApproval, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp } from "./services/notify.js";
+import { notifyContentCreated, notifyActivityApproval, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp, notifyUserEvent } from "./services/notify.js";
 import { chatWithBasir } from "./services/basir.js";
 import { generateImageEphemeral } from "./_core/imageGeneration.js";
 import { searchBooks, getGoogleBookById } from "./services/googleBooks.js";
@@ -1539,6 +1539,12 @@ export const appRouter = router({
         const target = await getUserById(input.id);
         await assertCanChangeUserRole(ctx.user.role, target?.role, input.role);
         await updateUserRole(input.id, input.role, ctx.user.id);
+        void notifyUserEvent(input.id, {
+          entityId: input.id,
+          title: "تم تحديث صلاحية حسابك",
+          body: "تم تعديل صلاحية حسابك في النادي.",
+          url: "/profile",
+        });
         recordWorkLog({
           ctx,
           scope: "elevated",
@@ -1717,12 +1723,24 @@ export const appRouter = router({
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         await approveUser(input, ctx.user.id);
+        void notifyUserEvent(input, {
+          entityId: input,
+          title: "تمت الموافقة على عضويتك",
+          body: "أصبح حسابك نشطًا ويمكنك استخدام خدمات النادي.",
+          url: "/profile",
+        });
         return { success: true };
       }),
     reject: adminProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         await rejectUser(input, ctx.user.id);
+        void notifyUserEvent(input, {
+          entityId: input,
+          title: "تم تحديث حالة طلب العضوية",
+          body: "يرجى مراجعة إدارة النادي للحصول على تفاصيل إضافية.",
+          url: "/profile",
+        });
         return { success: true };
       }),
   }),

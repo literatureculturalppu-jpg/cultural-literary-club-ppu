@@ -6,6 +6,7 @@ import * as db from "../db.js";
 import { getSessionCookieOptions } from "../_core/cookies.js";
 import { sdk } from "../_core/sdk.js";
 import { sendMobilePushToUsers } from "../services/mobilePush.js";
+import { notifyUserEvent } from "../services/notify.js";
 
 const BASE = "/api/mobile/v1";
 const WEB_SESSION_HANDOFF = "club-webview-session";
@@ -107,6 +108,12 @@ export function registerMobileRoutes(app: Express) {
     const user = await db.getUserById(handoff.userId);
     if (!user) { res.status(401).json({ message: "المستخدم غير موجود." }); return; }
     const sessionToken = await sdk.createSessionToken(user.openId, { name: user.name || "عضو النادي", expiresInMs: ONE_YEAR_MS });
+    void notifyUserEvent(user.id, {
+      entityId: 0,
+      title: "تم تسجيل الدخول إلى التطبيق",
+      body: "تم تسجيل الدخول إلى حسابك بنجاح.",
+      url: "/profile",
+    });
     res.json(envelope({ sessionToken, user: publicUser(user) }));
   });
 
@@ -171,10 +178,18 @@ export function registerMobileRoutes(app: Express) {
 
   app.post(`${BASE}/activities/:id/subscriptions`, async (req, res) => {
     const user = await requireMobile(req, res); if (!user) return;
-    const activityId = numeric(req.params.id); if (!activityId || !(await db.getActivityById(activityId))) { res.status(404).json({ message: "النشاط غير موجود." }); return; }
+    const activityId = numeric(req.params.id); const activity = activityId ? await db.getActivityById(activityId) : null;
+    if (!activityId || !activity) { res.status(404).json({ message: "النشاط غير موجود." }); return; }
     const existing = await db.getUserActivitySubscriptions(user.id);
     if (existing.some((entry) => entry.activityId === activityId)) { res.status(409).json({ message: "أنت مسجل في هذا النشاط مسبقاً." }); return; }
     await db.createActivitySubscription({ activityId, userId: user.id, status: "pending" });
+    void notifyUserEvent(user.id, {
+      entityId: activityId,
+      title: "تم استلام طلب انضمامك للنشاط",
+      body: `النشاط: ${activity.title}`,
+      url: `/activities/${activityId}`,
+      type: "activity",
+    });
     res.status(201).json(envelope({ success: true }));
   });
 
@@ -194,6 +209,12 @@ export function registerMobileRoutes(app: Express) {
     const round = await db.getActiveSuggestionRound(); if (!round) { res.status(409).json({ message: "لا توجد جولة اقتراحات مفتوحة." }); return; }
     if (await db.getMySuggestionInRound(round.id, user.id)) { res.status(409).json({ message: "يمكنك إرسال اقتراح واحد في الجولة الحالية." }); return; }
     await db.createSuggestion({ roundId: round.id, suggestedBy: user.id, title, author: typeof req.body?.author === "string" ? req.body.author.slice(0, 255) : null, note: typeof req.body?.note === "string" ? req.body.note.slice(0, 2000) : null });
+    void notifyUserEvent(user.id, {
+      entityId: round.id,
+      title: "تم استلام اقتراحك للكتاب",
+      body: "سيظهر لك أي تحديث مرتبط بجولة الاقتراحات.",
+      url: "/books",
+    });
     res.status(201).json(envelope({ success: true }));
   });
 
@@ -213,6 +234,12 @@ export function registerMobileRoutes(app: Express) {
       for (const ballot of existing) if (!optionIds.includes(ballot.optionId)) await db.castVote(poll.id, ballot.optionId, user.id, "multiple");
       for (const optionId of optionIds) if (!existingIds.has(optionId)) await db.castVote(poll.id, optionId, user.id, "multiple");
     }
+    void notifyUserEvent(user.id, {
+      entityId: poll.id,
+      title: "تم تسجيل تصويتك",
+      body: "تم حفظ اختيارك في تصويت النادي.",
+      url: "/books",
+    });
     res.json(envelope({ success: true }));
   });
 

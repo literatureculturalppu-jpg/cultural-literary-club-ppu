@@ -83,16 +83,13 @@ export async function notifyContentCreated(params: NotifyContentCreatedParams): 
 
 export async function notifyActivityApproval(userId: number, activityTitle: string, activityId: number): Promise<void> {
   try {
-    await db.createNotificationsForUsers(
-      [userId],
-      {
-        type: "activity",
-        entityId: activityId,
-        title: `تم قبولك في نشاط : ${activityTitle}`,
-        body: null,
-        url: `/activities/${activityId}`,
-      }
-    );
+    await notifyUserEvent(userId, {
+      type: "activity",
+      entityId: activityId,
+      title: `تم قبولك في نشاط : ${activityTitle}`,
+      body: "يمكنك فتح التطبيق للاطلاع على تفاصيل النشاط.",
+      url: `/activities/${activityId}`,
+    });
     console.log(`[notify] Sent approval notification to user ${userId} for activity "${activityTitle}"`);
   } catch (error) {
     console.error("[notify] Failed to send approval notification:", error);
@@ -115,6 +112,30 @@ export async function notifyActivityApproval(userId: number, activityTitle: stri
     }
   } catch (error) {
     console.error("[notify] Failed to email approval notification:", error);
+  }
+}
+
+/** Delivers a private event to the in-app inbox and only to devices registered
+ * for the same user. Text remains safe for lock-screen preview. */
+export async function notifyUserEvent(
+  userId: number,
+  params: { entityId: number; title: string; body?: string | null; url: string; type?: "activity" | "team_chat" | "team_request" }
+): Promise<void> {
+  try {
+    await db.createNotificationsForUsers([userId], {
+      type: params.type ?? "team_request",
+      entityId: params.entityId,
+      title: params.title,
+      body: params.body ?? null,
+      url: params.url,
+    });
+    void sendMobilePushToUsers([userId], {
+      title: params.title,
+      body: params.body ?? "لديك تحديث جديد في حسابك.",
+      data: { url: params.url, type: params.type ?? "user_event", entityId: params.entityId, private: true },
+    });
+  } catch (error) {
+    console.error("[notify] Failed to deliver private user event:", error);
   }
 }
 
@@ -168,9 +189,9 @@ export async function notifyBookCreated(bookId: number, bookTitle: string, autho
 }
 
 /**
- * Team chat messages and team management requests are surfaced ONLY as
- * in-app notifications (bell icon) — intentionally no email dispatch here,
- * per product requirement that team activity stays inside the app.
+ * Team chat messages and team management requests are surfaced in the in-app
+ * inbox and to the affected member's registered mobile devices only. No email
+ * is dispatched for team activity.
  */
 export async function notifyTeamInApp(
   userIds: number[],
@@ -184,6 +205,11 @@ export async function notifyTeamInApp(
       title: params.title,
       body: params.body ?? null,
       url: params.url,
+    });
+    void sendMobilePushToUsers(userIds, {
+      title: params.title,
+      body: params.body ?? "لديك تحديث جديد في حسابك.",
+      data: { url: params.url, type: params.type ?? "team_request", entityId: params.entityId, private: true },
     });
   } catch (error) {
     console.error("[notify] Failed to send team notification:", error);
