@@ -1,3 +1,10 @@
 User-agent: *
 Allow: /
-Sitemap: https://cultural-literary-club.vercel.app/sitemap.xml
+Disallow: /admin/
+Disallow: /api/
+Disallow: /profile
+Disallow: /notifications/
+Disallow: /onboarding
+Disallow: /pending-approval
+
+Sitemap: https://cultural-literary-club-ppu.vercel.app/sitemap.xml

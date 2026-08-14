@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://cultural-literary-club.vercel.app/</loc>
-    <lastmod>2026-07-06</lastmod>
-    <priority>1.0</priority>
-  </url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/about</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/activities</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/articles</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/achievements</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/books</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/teams</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/quick-links</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/privacy-policy</loc></url>
+  <url><loc>https://cultural-literary-club-ppu.vercel.app/terms-of-use</loc></url>
 </urlset>
