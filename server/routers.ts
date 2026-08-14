@@ -2745,7 +2745,7 @@ export const appRouter = router({
           links: input.links?.filter(Boolean) ?? [],
           attachments: input.files?.map((file) => ({ name: file.name, url: file.url, key: file.key })) ?? [],
         });
-        void sendMobilePushForNotifications(deliveries, {
+        const pushDelivered = await sendMobilePushForNotifications(deliveries, {
           title: input.title,
           body: input.body,
           data: { type: "announcement" },
@@ -2757,9 +2757,9 @@ export const appRouter = router({
           action: "notification_center.send",
           description: `قام ${ctx.user.name || "مستخدم"} بإرسال إشعار بعنوان "${input.title}" إلى ${recipientIds.length} مستلم`,
           entityType: "notification",
-          metadata: { recipientMode: input.recipientMode, recipientCount: recipientIds.length, hasLinks: !!input.links?.length, hasFiles: !!input.files?.length },
+          metadata: { recipientMode: input.recipientMode, recipientCount: recipientIds.length, pushDelivered, hasLinks: !!input.links?.length, hasFiles: !!input.files?.length },
         });
-        return { recipientCount: recipientIds.length, notificationIds: deliveries.map((delivery) => delivery.id) };
+        return { recipientCount: recipientIds.length, pushDelivered, notificationIds: deliveries.map((delivery) => delivery.id) };
       }),
   }),
 

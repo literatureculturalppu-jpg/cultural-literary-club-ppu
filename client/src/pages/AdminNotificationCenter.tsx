@@ -40,7 +40,7 @@ export default function AdminNotificationCenter() {
   const fileRef = useRef<HTMLInputElement>(null);
   const send = trpc.notificationCenter.send.useMutation({
     onSuccess: (result) => {
-      toast.success(`تم إنشاء الإشعار وإرساله إلى ${result.recipientCount} مستلم، ويشمل حسابك.`);
+      toast.success(`تم إنشاء الإشعار لـ ${result.recipientCount} مستلم، وقبلت خدمة التنبيهات إرساله إلى ${result.pushDelivered} جهاز.`);
       setTitle(""); setBody(""); setLinks([]); setFiles([]); setMode("all"); setSelectedRoles([]); setSelectedUserIds([]);
       utils.notifications.list.invalidate();
       utils.notifications.countUnread.invalidate();

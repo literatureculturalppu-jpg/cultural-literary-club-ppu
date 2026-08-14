@@ -12,6 +12,7 @@ describe("notification center contract", () => {
     expect(router).toContain("detail: protectedProcedure");
     expect(router).toContain("getUserNotificationDetail(ctx.user.id, input)");
     expect(router).toContain("Array.from(new Set([...audience.map((user) => user.id), ctx.user.id]))");
+    expect(router).toContain("const pushDelivered = await sendMobilePushForNotifications");
   });
 
   it("keeps the user interface and app routes linked to recipient-specific details", () => {
