@@ -45,14 +45,14 @@ export function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  const handleItemClick = (item: { id: number; url: string | null; isRead: boolean }) => {
+  const handleItemClick = (item: { id: number; isRead: boolean }) => {
     if (!item.isRead) {
       markRead.mutate(item.id, {
         onSuccess: () => utils.notifications.countUnread.invalidate(),
       });
     }
     setOpen(false);
-    if (item.url) navigate(item.url);
+    navigate(`/notifications/${item.id}`);
   };
 
   return (

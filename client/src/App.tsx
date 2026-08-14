@@ -18,6 +18,7 @@ const Articles = lazy(() => import("./pages/Articles"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const PendingApproval = lazy(() => import("./pages/PendingApproval"));
+const PendingApprovalRoute = () => <PendingApproval />;
 const AdminActivities = lazy(() => import("./pages/AdminActivities"));
 const AdminArticles = lazy(() => import("./pages/AdminArticles"));
 const AdminMembers = lazy(() => import("./pages/AdminMembers"));
@@ -45,6 +46,8 @@ const AdminRegistrationRequests = lazy(() => import("./pages/AdminRegistrationRe
 const AdminProfileEditRequests = lazy(() => import("./pages/AdminProfileEditRequests"));
 const AdminWorkLogs = lazy(() => import("./pages/AdminWorkLogs"));
 const AdminBroadcastEmail = lazy(() => import("./pages/AdminBroadcastEmail"));
+const AdminNotificationCenter = lazy(() => import("./pages/AdminNotificationCenter"));
+const NotificationDetail = lazy(() => import("./pages/NotificationDetail"));
 const OnboardingForm = lazy(() =>
   import("./pages/OnboardingForm").then((m) => ({ default: m.OnboardingForm }))
 );
@@ -108,14 +111,16 @@ function Router() {
         <Route path={"/admin/profile-edit-requests"} component={AdminProfileEditRequests} />
         <Route path={"/admin/work-logs"} component={AdminWorkLogs} />
         <Route path={"/admin/broadcast-email"} component={AdminBroadcastEmail} />
+        <Route path={"/admin/notifications"} component={AdminNotificationCenter} />
         <Route path={"/admin/registration-settings"} component={RegistrationSettings} />
         <Route path={"/admin/activities/:id/registrations"} component={AdminActivityRegistrations} />
         <Route path={"/admin/basir-settings"} component={AdminBasirSettings} />
 
-        <Route path={"/pending-approval"} component={PendingApproval} />
+        <Route path={"/pending-approval"} component={PendingApprovalRoute} />
         <Route path={"/onboarding"} component={OnboardingForm} />
         <Route path={"/login"} component={Login} />
         <Route path={"/profile"} component={Profile} />
+        <Route path={"/notifications/:id"} component={NotificationDetail} />
         <Route path={"/activities/:id"} component={ActivityDetail} />
         <Route path={"/articles/:id"} component={ArticleDetail} />
         <Route path={"/achievements/:id"} component={AchievementDetail} />

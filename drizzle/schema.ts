@@ -413,17 +413,32 @@ export type InsertProfileEditRequest = typeof profileEditRequests.$inferInsert;
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(), // Reference to users.id (recipient)
+  senderId: integer("senderId"), // Reference to users.id (the administrative sender)
   type: notificationTypeEnum("type").notNull(),
   entityId: integer("entityId").notNull(), // Reference to the related content row
   title: varchar("title", { length: 255 }).notNull(),
   body: text("body"), // Optional preview / excerpt
   url: varchar("url", { length: 500 }).notNull(), // Relative link to the content
+  links: text("links"), // JSON array of optional external links
   isRead: boolean("isRead").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
+
+/** Files attached to one in-app announcement. A row is duplicated per
+ * recipient notification so access can always be verified by userId. */
+export const notificationAttachments = pgTable("notificationAttachments", {
+  id: serial("id").primaryKey(),
+  notificationId: integer("notificationId").notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  fileUrl: varchar("fileUrl", { length: 500 }).notNull(),
+  fileKey: varchar("fileKey", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type NotificationAttachment = typeof notificationAttachments.$inferSelect;
+export type InsertNotificationAttachment = typeof notificationAttachments.$inferInsert;
 
 /** Registered Expo devices belonging to a signed-in club user. Tokens are
  * public device addresses, but are stored server-side and never returned by

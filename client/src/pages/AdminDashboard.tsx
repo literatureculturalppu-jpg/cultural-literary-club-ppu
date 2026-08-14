@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bot, UsersRound, UserCog, FileEdit, FileClock, Video } from "lucide-react";
+import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bell, Bot, UsersRound, UserCog, FileEdit, FileClock, Video } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useEffect } from "react";
 
@@ -249,12 +249,20 @@ export default function AdminDashboard() {
                 </Button>
               </Link>
               {(user?.role === "admin" || user?.role === "tech_admin") && (
-                <Link href="/admin/broadcast-email">
-                  <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    بريد جماعي
-                  </Button>
-                </Link>
+                <>
+                  <Link href="/admin/notifications">
+                    <Button variant="outline" className="w-full flex items-center justify-center gap-2">
+                      <Bell className="w-4 h-4" />
+                      مركز الإشعارات
+                    </Button>
+                  </Link>
+                  <Link href="/admin/broadcast-email">
+                    <Button variant="outline" className="w-full flex items-center justify-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      بريد جماعي
+                    </Button>
+                  </Link>
+                </>
               )}
               {user?.role === "tech_admin" && (
                 <Link href="/admin/work-logs">

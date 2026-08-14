@@ -10,6 +10,7 @@ import { notifyUserEvent } from "../services/notify.js";
 
 const BASE = "/api/mobile/v1";
 const SESSION_COOKIE = "club_web_session";
+const WEB_SESSION_HANDOFF = "webview-session-handoff";
 const CONTENT_KINDS = ["article", "activity", "achievement", "book"] as const;
 type ContentKind = (typeof CONTENT_KINDS)[number];
 

@@ -1,0 +1,17 @@
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { trpc } from "@/lib/trpc";
+import { ArrowRight, Bell, CalendarDays, ExternalLink, FileText, Link as LinkIcon, Loader2, UserRound } from "lucide-react";
+import { Link, useParams } from "wouter";
+
+export default function NotificationDetail() {
+  const params = useParams<{ id: string }>();
+  const id = Number(params.id);
+  const { data, isLoading, error } = trpc.notifications.detail.useQuery(id, { enabled: Number.isInteger(id) && id > 0, retry: false });
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin text-accent" /></div>;
+  if (!data || error) return <div className="min-h-screen flex items-center justify-center bg-background"><Card className="p-8 text-center"><h1 className="font-bold text-xl mb-3">الإشعار غير متاح</h1><p className="text-muted-foreground mb-5">ربما لا يخص حسابك أو لم يعد متاحًا.</p><Link href="/"><Button>العودة للرئيسية</Button></Link></Card></div>;
+  const linkedContent = data.url && !data.url.startsWith("/notifications") ? data.url : null;
+  return <div className="min-h-screen bg-background" dir="rtl"><section className="bg-gradient-to-b from-accent/10 to-background py-10"><div className="container max-w-3xl"><Link href="/"><Button variant="outline" size="sm"><ArrowRight className="w-4 h-4" /></Button></Link><div className="flex items-center gap-3 mt-5"><div className="w-11 h-11 rounded-xl bg-accent/15 flex items-center justify-center"><Bell className="w-5 h-5 text-accent" /></div><div><p className="text-sm text-muted-foreground">تفاصيل الإشعار</p><h1 className="text-2xl md:text-3xl font-bold">{data.title}</h1></div></div></div></section><main className="container max-w-3xl py-8 space-y-5"><Card className="p-6"><div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-6"><span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{new Date(data.createdAt).toLocaleString("ar-EG")}</span>{data.sender && <span className="flex items-center gap-1"><UserRound className="w-4 h-4" />من: {data.sender.name}</span>}</div><div className="whitespace-pre-wrap leading-8 text-foreground">{data.body}</div></Card>{data.links.length > 0 && <Card className="p-6"><h2 className="font-bold flex gap-2 items-center mb-4"><LinkIcon className="w-4 h-4 text-accent" />روابط مرفقة</h2><div className="space-y-2">{data.links.map((url) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-accent hover:underline break-all"><ExternalLink className="w-4 h-4 shrink-0" />{url}</a>)}</div></Card>}{data.attachments.length > 0 && <Card className="p-6"><h2 className="font-bold flex gap-2 items-center mb-4"><PaperclipIcon />الملفات المرفقة</h2><div className="space-y-2">{data.attachments.map((file) => <a key={file.id} href={file.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between border rounded-lg p-3 hover:bg-muted/50"><span className="flex gap-2 items-center"><FileText className="w-4 h-4 text-accent" />{file.fileName}</span><ExternalLink className="w-4 h-4" /></a>)}</div></Card>}{linkedContent && <Link href={linkedContent}><Button className="w-full">فتح المحتوى المرتبط</Button></Link>}</main></div>;
+}
+
+function PaperclipIcon() { return <FileText className="w-4 h-4 text-accent" />; }

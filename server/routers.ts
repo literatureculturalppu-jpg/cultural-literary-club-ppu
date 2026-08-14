@@ -98,9 +98,11 @@ import {
   upsertUser,
   isProtectedAdminUser,
   getUserNotifications,
+  getUserNotificationDetail,
   countUnreadNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  createNotificationsForUsers,
   getAiSettings,
   updateAiEnabled,
   getAiPdfFiles,
@@ -168,6 +170,7 @@ import {
 import { notifyOwner } from "./_core/notification.js";
 import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
 import { notifyContentCreated, notifyActivityApproval, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp, notifyUserEvent } from "./services/notify.js";
+import { sendMobilePushForNotifications } from "./services/mobilePush.js";
 import { chatWithBasir } from "./services/basir.js";
 import { generateImageEphemeral } from "./_core/imageGeneration.js";
 import { searchBooks, getGoogleBookById } from "./services/googleBooks.js";
@@ -2224,7 +2227,7 @@ export const appRouter = router({
         const admins = await getAdminTierUsers();
         const recipientIds = new Set(admins.map((a) => a.id));
         if (team.headFreedom) recipientIds.add(team.headId);
-        await notifyTeamInApp([...recipientIds], {
+        await notifyTeamInApp(Array.from(recipientIds), {
           entityId: link.teamId,
           title: `طلب انضمام عبر رابط دعوة لفريق "${team.name}"`,
           body: `${ctx.user.name} يرغب بالانضمام إلى الفريق`,
@@ -2401,7 +2404,7 @@ export const appRouter = router({
         const admins = await getAdminTierUsers();
         const recipientIds = new Set(admins.map((a) => a.id));
         if (team.headFreedom) recipientIds.add(team.headId);
-        await notifyTeamInApp([...recipientIds], {
+        await notifyTeamInApp(Array.from(recipientIds), {
           entityId: input.teamId,
           title: `طلب انضمام جديد لفريق "${team.name}"`,
           body: `${ctx.user.name} يرغب بالانضمام إلى الفريق`,
@@ -2587,7 +2590,7 @@ export const appRouter = router({
         const content = input.content.trim();
         if (!content) throw new TRPCError({ code: "BAD_REQUEST" });
 
-        const message = appendTeamMessage(input.teamId, ctx.user.id, ctx.user.name, content);
+        const message = appendTeamMessage(input.teamId, ctx.user.id, ctx.user.name || "عضو النادي", content);
 
         const roster = await getTeamRosterNamesOnly(input.teamId);
         const recipients = roster.map((m) => m.id).filter((id) => id !== ctx.user.id);
@@ -2675,6 +2678,89 @@ export const appRouter = router({
       await markAllNotificationsRead(ctx.user.id);
       return { success: true };
     }),
+    // Returns one notification only when it belongs to the signed-in user;
+    // this protects sender/link/file information from other members.
+    detail: protectedProcedure
+      .input(z.number().int().positive())
+      .query(async ({ input, ctx }) => {
+        const notification = await getUserNotificationDetail(ctx.user.id, input);
+        if (!notification) throw new TRPCError({ code: "NOT_FOUND", message: "الإشعار غير موجود" });
+        if (!notification.isRead) await markNotificationRead(ctx.user.id, input);
+        return notification;
+      }),
+  }),
+
+  notificationCenter: router({
+    listRecipients: broadcastProcedure.query(async () => {
+      const allUsers = await getUsers();
+      return allUsers
+        .filter((user) => user.approvalStatus === "approved" && user.onboardingCompleted)
+        .map((user) => ({
+          id: user.id,
+          name: user.arabicFullName || user.name || `عضو #${user.id}`,
+          role: user.role,
+          referenceNumber: user.referenceNumber,
+        }));
+    }),
+    send: broadcastProcedure
+      .input(z.object({
+        title: z.string().trim().min(1, "يرجى كتابة عنوان الإشعار").max(255),
+        body: z.string().trim().min(1, "يرجى كتابة نص الإشعار").max(5000),
+        recipientMode: z.enum(["all", "roles", "specific"]),
+        roles: z.array(z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"])).max(6).optional(),
+        userIds: z.array(z.number().int().positive()).max(500).optional(),
+        links: z.array(z.string().url().max(1000)).max(10).optional(),
+        files: z.array(z.object({
+          name: z.string().min(1).max(255),
+          url: z.string().url().max(1000),
+          key: z.string().max(255).optional(),
+        })).max(10).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const approvedUsers = (await getUsers()).filter(
+          (user) => user.approvalStatus === "approved" && user.onboardingCompleted
+        );
+        let audience = approvedUsers;
+        if (input.recipientMode === "roles") {
+          const roles = new Set(input.roles ?? []);
+          if (roles.size === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "يرجى اختيار صلاحية واحدة على الأقل" });
+          audience = approvedUsers.filter((user) => roles.has(user.role));
+        }
+        if (input.recipientMode === "specific") {
+          const ids = new Set(input.userIds ?? []);
+          if (ids.size === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "يرجى اختيار عضو واحد على الأقل" });
+          audience = approvedUsers.filter((user) => ids.has(user.id));
+        }
+
+        // The sender is explicitly appended even when their current role does
+        // not match the chosen audience, fulfilling "الجميع" consistently.
+        const recipientIds = Array.from(new Set([...audience.map((user) => user.id), ctx.user.id]));
+        const deliveries = await createNotificationsForUsers(recipientIds, {
+          senderId: ctx.user.id,
+          type: "announcement",
+          entityId: 0,
+          title: input.title,
+          body: input.body,
+          url: "/notifications",
+          links: input.links?.filter(Boolean) ?? [],
+          attachments: input.files?.map((file) => ({ name: file.name, url: file.url, key: file.key })) ?? [],
+        });
+        void sendMobilePushForNotifications(deliveries, {
+          title: input.title,
+          body: input.body,
+          data: { type: "announcement" },
+        });
+        recordWorkLog({
+          ctx,
+          scope: "elevated",
+          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
+          action: "notification_center.send",
+          description: `قام ${ctx.user.name || "مستخدم"} بإرسال إشعار بعنوان "${input.title}" إلى ${recipientIds.length} مستلم`,
+          entityType: "notification",
+          metadata: { recipientMode: input.recipientMode, recipientCount: recipientIds.length, hasLinks: !!input.links?.length, hasFiles: !!input.files?.length },
+        });
+        return { recipientCount: recipientIds.length, notificationIds: deliveries.map((delivery) => delivery.id) };
+      }),
   }),
 
   basir: router({

@@ -22,8 +22,9 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type RecipientMode = "all" | "roles" | "specific";
+type RecipientRole = "user" | "admin" | "supervisor" | "committee_head" | "general_agent" | "tech_admin";
 
-const roleOptions: { value: string; label: string }[] = [
+const roleOptions: { value: RecipientRole; label: string }[] = [
   { value: "user", label: "عضو" },
   { value: "supervisor", label: "مشرف" },
   { value: "committee_head", label: "مشرف فريق" },
@@ -64,7 +65,7 @@ export default function AdminBroadcastEmail() {
   const [message, setMessage] = useState("");
 
   const [recipientMode, setRecipientMode] = useState<RecipientMode>("all");
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedRoles, setSelectedRoles] = useState<RecipientRole[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [memberSearch, setMemberSearch] = useState("");
 
@@ -141,7 +142,7 @@ export default function AdminBroadcastEmail() {
     );
   }
 
-  const toggleRole = (role: string) => {
+  const toggleRole = (role: RecipientRole) => {
     setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
   };
 

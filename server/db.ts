@@ -19,6 +19,7 @@ import {
   type InsertTeamInviteLink,
   registrationRequests,
   notifications,
+  notificationAttachments,
   aiSettings,
   aiPdfFiles,
   aiUsage,
@@ -36,6 +37,7 @@ import {
   type InsertTeamActionRequest,
   type InsertRegistrationRequest,
   type InsertNotification,
+  type InsertNotificationAttachment,
   type InsertAiPdfFile,
   guestActivityRegistrations,
   type InsertGuestActivityRegistration,
@@ -104,6 +106,17 @@ export async function ensureMobileInfrastructure() {
     if (!db) throw new Error("Database not available");
     await db.execute(sql.raw(`ALTER TYPE "notification_type" ADD VALUE IF NOT EXISTS 'book'`));
     await db.execute(sql.raw(`ALTER TYPE "notification_type" ADD VALUE IF NOT EXISTS 'announcement'`));
+    await db.execute(sql.raw(`ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "senderId" integer`));
+    await db.execute(sql.raw(`ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "links" text`));
+    await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS "notificationAttachments" (
+      "id" serial PRIMARY KEY,
+      "notificationId" integer NOT NULL,
+      "fileName" varchar(255) NOT NULL,
+      "fileUrl" varchar(500) NOT NULL,
+      "fileKey" varchar(255),
+      "createdAt" timestamp DEFAULT now() NOT NULL
+    )`));
+    await db.execute(sql.raw(`CREATE INDEX IF NOT EXISTS "notificationAttachments_notificationId_idx" ON "notificationAttachments" ("notificationId")`));
     await db.execute(sql.raw(`CREATE TABLE IF NOT EXISTS "mobileDevices" (
       "id" serial PRIMARY KEY,
       "userId" integer NOT NULL,
@@ -1746,28 +1759,52 @@ export async function getContentNotificationRecipients(
   return rows;
 }
 
-/**
- * Bulk-insert in-app notifications for multiple recipients.
- * Returns immediately when `userIds` is empty.
- */
+export type NotificationAttachmentInput = {
+  name: string;
+  url: string;
+  key?: string | null;
+};
+
+export type NotificationPayload = Omit<InsertNotification, "id" | "userId" | "createdAt" | "isRead" | "links"> & {
+  links?: string[];
+  attachments?: NotificationAttachmentInput[];
+};
+
+/** Creates one recipient-scoped in-app row per user. Rich attachment rows are
+ * duplicated per recipient, allowing the details lookup to enforce ownership. */
 export async function createNotificationsForUsers(
   userIds: number[],
-  payload: Omit<InsertNotification, "id" | "userId" | "createdAt" | "isRead">
-): Promise<void> {
-  if (userIds.length === 0) return;
+  payload: NotificationPayload
+): Promise<Array<{ id: number; userId: number }>> {
+  const uniqueUserIds = Array.from(new Set(userIds));
+  if (uniqueUserIds.length === 0) return [];
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const rows: InsertNotification[] = userIds.map((userId) => ({
+  const rows: InsertNotification[] = uniqueUserIds.map((userId) => ({
     userId,
+    senderId: payload.senderId ?? null,
     type: payload.type,
     entityId: payload.entityId,
     title: payload.title,
     body: payload.body ?? null,
     url: payload.url,
+    links: payload.links?.length ? JSON.stringify(payload.links) : null,
   }));
 
-  await db.insert(notifications).values(rows);
+  const created = await db.insert(notifications).values(rows).returning({ id: notifications.id, userId: notifications.userId });
+  if (payload.attachments?.length) {
+    const attachmentRows: InsertNotificationAttachment[] = created.flatMap((notification) =>
+      payload.attachments!.map((attachment) => ({
+        notificationId: notification.id,
+        fileName: attachment.name,
+        fileUrl: attachment.url,
+        fileKey: attachment.key ?? null,
+      }))
+    );
+    await db.insert(notificationAttachments).values(attachmentRows);
+  }
+  return created;
 }
 
 export async function getUserNotifications(
@@ -1782,6 +1819,40 @@ export async function getUserNotifications(
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
+}
+
+export async function getUserNotificationDetail(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(notifications)
+    .where(and(eq(notifications.id, id), eq(notifications.userId, userId)))
+    .limit(1);
+  const notification = rows[0];
+  if (!notification) return null;
+
+  const [attachments, senderRows] = await Promise.all([
+    db.select().from(notificationAttachments).where(eq(notificationAttachments.notificationId, id)).orderBy(notificationAttachments.id),
+    notification.senderId
+      ? db.select({ id: users.id, name: users.name, arabicFullName: users.arabicFullName, role: users.role }).from(users).where(eq(users.id, notification.senderId)).limit(1)
+      : Promise.resolve([]),
+  ]);
+
+  let links: string[] = [];
+  try {
+    const parsed = JSON.parse(notification.links ?? "[]");
+    links = Array.isArray(parsed) ? parsed.filter((link): link is string => typeof link === "string") : [];
+  } catch {
+    links = [];
+  }
+  const sender = senderRows[0] ?? null;
+  return {
+    ...notification,
+    links,
+    attachments,
+    sender: sender ? { id: sender.id, name: sender.arabicFullName || sender.name || "إدارة النادي", role: sender.role } : null,
+  };
 }
 
 export async function countUnreadNotifications(userId: number): Promise<number> {

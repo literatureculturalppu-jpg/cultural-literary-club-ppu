@@ -471,7 +471,7 @@ function SettingsTab({ team, teamId, isAdminTier }: { team: any; teamId: number;
                     variant="ghost"
                     className="text-red-500 hover:text-red-600 gap-1"
                     disabled={removeMember.isPending}
-                    onClick={() => removeMember.mutate(m.membershipId)}
+                    onClick={() => removeMember.mutate(m.membershipId!)}
                   >
                     <UserMinus className="w-3.5 h-3.5" />
                     إخراج
