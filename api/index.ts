@@ -25,43 +25,6 @@ app.use(express.json({ limit: "50mb" }));
 registerOAuthRoutes(app);
 registerMobileRoutes(app);
 
-const PUBLIC_CONTENT_PROCEDURES = new Set([
-  "/activities.list",
-  "/activities.getById",
-  "/articles.list",
-  "/articles.getById",
-  "/articles.getBySlug",
-  "/achievements.list",
-  "/achievements.getById",
-  "/books.list",
-  "/books.getById",
-  "/externalLinks.list",
-  "/externalLinks.getByType",
-  "/teamMembers.list",
-]);
-const PUBLIC_CONTENT_CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300";
-
-// These responses are public editorial content. Cache them at Vercel's CDN
-// for 60 seconds and serve a five-minute stale copy while one request refreshes
-// the origin. Requests with a cookie are deliberately excluded so user-specific
-// data, permission-sensitive content, and login state are never cached.
-app.use("/api/trpc", (req, res, next) => {
-  if (
-    req.method === "GET" &&
-    !req.headers.cookie &&
-    PUBLIC_CONTENT_PROCEDURES.has(req.path)
-  ) {
-    // Vercel consumes this targeted header at the edge. Keep the browser at
-    // max-age=0 so content edits are visible on the next visit, while the
-    // globally shared CDN cache shields the function and database.
-    res.setHeader("Vercel-CDN-Cache-Control", PUBLIC_CONTENT_CDN_CACHE);
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-  } else {
-    res.setHeader("Cache-Control", "private, no-store");
-  }
-  next();
-});
-
 // Daily scheduled cleanup for the "الكتب" page: deletes closed suggestion
 // rounds / vote polls once their grace period (5 / 7 days) has passed.
 // Triggered by Vercel Cron (see vercel.json). Protected by CRON_SECRET when

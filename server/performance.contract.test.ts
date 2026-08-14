@@ -19,13 +19,10 @@ describe("production performance contracts", () => {
   });
 
   it("sets short shared caching only for explicitly public content", () => {
-    const entry = read("api/index.ts");
-    const mobileRoutes = read("server/routes/mobile.ts");
-    expect(entry).toContain("Vercel-CDN-Cache-Control");
-    expect(entry).toContain("s-maxage=60, stale-while-revalidate=300");
-    expect(entry).toContain("!req.headers.cookie");
-    expect(mobileRoutes).toContain("cachePublicContent");
-    expect(mobileRoutes).toContain("app.use(`${BASE}/auth`");
+    const config = JSON.parse(read("vercel.json"));
+    const cacheHeaders = config.headers.flatMap((rule: { headers: Array<{ key: string; value: string }> }) => rule.headers);
+    expect(cacheHeaders).toContainEqual({ key: "Vercel-CDN-Cache-Control", value: "public, s-maxage=60, stale-while-revalidate=300" });
+    expect(read("server/routes/mobile.ts")).toContain("app.use(`${BASE}/auth`");
   });
 
   it("defers the assistant panel and avoids aggressive query refetches", () => {

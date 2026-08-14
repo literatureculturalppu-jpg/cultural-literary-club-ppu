@@ -10,7 +10,6 @@ import { notifyUserEvent } from "../services/notify.js";
 
 const BASE = "/api/mobile/v1";
 const SESSION_COOKIE = "club_web_session";
-const PUBLIC_CONTENT_CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300";
 const CONTENT_KINDS = ["article", "activity", "achievement", "book"] as const;
 type ContentKind = (typeof CONTENT_KINDS)[number];
 
@@ -89,15 +88,6 @@ export function registerMobileRoutes(app: Express) {
     next();
   });
 
-  // Public editorial data can be shared by all visitors. Keeping a short CDN
-  // cache protects the mobile feed from cold database work while stale-while-
-  // revalidate makes content updates visible quickly without blocking readers.
-  const cachePublicContent = (_req: Request, res: Response, next: () => void) => {
-    res.setHeader("Vercel-CDN-Cache-Control", PUBLIC_CONTENT_CDN_CACHE);
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-    next();
-  };
-
   app.get(`${BASE}/auth/google`, (req, res) => {
     const redirectUri = queryString(req.query.redirect_uri);
     if (!isAllowedRedirectUri(redirectUri)) { res.status(400).json({ message: "رابط العودة غير مسموح." }); return; }
@@ -158,7 +148,7 @@ export function registerMobileRoutes(app: Express) {
     res.json(envelope(publicUser(user)));
   });
 
-  app.get(`${BASE}/feed`, cachePublicContent, async (_req, res) => {
+  app.get(`${BASE}/feed`, async (_req, res) => {
     const [articles, activities, achievements, books] = await Promise.all(CONTENT_KINDS.map((kind) => listRows(kind)));
     const all = [...articles.map((row) => normalize("article", row)), ...activities.map((row) => normalize("activity", row)), ...achievements.map((row) => normalize("achievement", row)), ...books.map((row) => normalize("book", row))];
     all.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
@@ -166,7 +156,7 @@ export function registerMobileRoutes(app: Express) {
     res.json(envelope({ highlights, latest: all.slice(0, 12), contentVersion: String(all[0]?.updatedAt || "empty") }));
   });
 
-  app.get(`${BASE}/about`, cachePublicContent, async (_req, res) => {
+  app.get(`${BASE}/about`, async (_req, res) => {
     res.json(envelope({
       title: "عن النادي الثقافي الأدبي",
       body: "تأسس النادي الثقافي الأدبي في جامعة بوليتكنك فلسطين برؤية واضحة لإثراء الحياة الثقافية والأدبية بين طلاب الجامعة، من خلال الأدب والفكر والفنون بمختلف تجلياتها. ويحتل الاعتناء باللغة العربية وآدابها مكانة خاصة ضمن اهتمامات النادي، بوصفها جزءاً أصيلاً من هويتنا الثقافية.",
@@ -175,7 +165,7 @@ export function registerMobileRoutes(app: Express) {
     }));
   });
 
-  app.get(`${BASE}/:resource(articles|activities|achievements|books)`, cachePublicContent, async (req, res) => {
+  app.get(`${BASE}/:resource(articles|activities|achievements|books)`, async (req, res) => {
     const kind = ({ articles: "article", activities: "activity", achievements: "achievement", books: "book" } as const)[req.params.resource as "articles"];
     const query = queryString(req.query.query).trim().toLocaleLowerCase("ar");
     const requestedLimit = Number(queryString(req.query.limit)) || 50;
@@ -183,7 +173,7 @@ export function registerMobileRoutes(app: Express) {
     res.json(envelope({ items: rows.slice(0, Math.min(requestedLimit, 100)), nextCursor: null, contentVersion: String(rows[0]?.updatedAt || "empty") }));
   });
 
-  app.get(`${BASE}/:resource(articles|activities|achievements|books)/:id`, cachePublicContent, async (req, res) => {
+  app.get(`${BASE}/:resource(articles|activities|achievements|books)/:id`, async (req, res) => {
     const kind = ({ articles: "article", activities: "activity", achievements: "achievement", books: "book" } as const)[req.params.resource as "articles"];
     const id = numeric(req.params.id); if (!id) { res.status(400).json({ message: "معرّف المحتوى غير صالح." }); return; }
     const row = await getRow(kind, id); if (!row) { res.status(404).json({ message: "المحتوى غير موجود." }); return; }
