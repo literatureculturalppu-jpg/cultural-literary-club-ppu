@@ -1778,6 +1778,7 @@ export async function createNotificationsForUsers(
 ): Promise<Array<{ id: number; userId: number }>> {
   const uniqueUserIds = Array.from(new Set(userIds));
   if (uniqueUserIds.length === 0) return [];
+  await ensureMobileInfrastructure();
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1822,6 +1823,7 @@ export async function getUserNotifications(
 }
 
 export async function getUserNotificationDetail(userId: number, id: number) {
+  await ensureMobileInfrastructure();
   const db = await getDb();
   if (!db) return null;
   const rows = await db
