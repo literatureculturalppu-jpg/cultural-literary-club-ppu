@@ -15,13 +15,47 @@ const app = express();
 // explanation. This is the entrypoint vercel.json actually routes /api/*
 // to in production, so this is the copy of the fix that matters most.
 app.set("trust proxy", 1);
-// securityHeaders/rateLimiter existed in server/_core/security.ts but were
-// never applied to any Express app, including this production entrypoint.
+// Apply headers globally, but reserve rate limiting for the abuse-prone
+// authentication and upload routes. Applying it to every data request makes
+// normal React Query navigation vulnerable to 429 responses.
 app.use(securityHeaders);
-app.use(rateLimiter);
+app.use("/api/auth", rateLimiter);
+app.use("/api/upload", rateLimiter);
 app.use(express.json({ limit: "50mb" }));
 registerOAuthRoutes(app);
 registerMobileRoutes(app);
+
+const PUBLIC_CONTENT_PROCEDURES = new Set([
+  "/activities.list",
+  "/activities.getById",
+  "/articles.list",
+  "/articles.getById",
+  "/articles.getBySlug",
+  "/achievements.list",
+  "/achievements.getById",
+  "/books.list",
+  "/books.getById",
+  "/externalLinks.list",
+  "/externalLinks.getByType",
+  "/teamMembers.list",
+]);
+
+// These responses are public editorial content. Cache them at Vercel's CDN
+// for 60 seconds and serve a five-minute stale copy while one request refreshes
+// the origin. Requests with a cookie are deliberately excluded so user-specific
+// data, permission-sensitive content, and login state are never cached.
+app.use("/api/trpc", (req, res, next) => {
+  if (
+    req.method === "GET" &&
+    !req.headers.cookie &&
+    PUBLIC_CONTENT_PROCEDURES.has(req.path)
+  ) {
+    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  } else {
+    res.setHeader("Cache-Control", "private, no-store");
+  }
+  next();
+});
 
 // Daily scheduled cleanup for the "الكتب" page: deletes closed suggestion
 // rounds / vote polls once their grace period (5 / 7 days) has passed.

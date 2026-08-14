@@ -4,6 +4,7 @@
   "installCommand": "pnpm install --no-frozen-lockfile",
   "framework": "vite",
   "outputDirectory": "dist/public",
+  "regions": ["hnd1"],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.ts" },
     { "source": "/(.*)", "destination": "/index.html" }

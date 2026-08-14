@@ -23,6 +23,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    reportCompressedSize: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("streamdown")) return "markdown-renderer";
+          if (id.includes("recharts")) return "charts";
+          if (id.includes("@radix-ui")) return "radix-ui";
+        },
+      },
+    },
   },
   server: {
     host: true,

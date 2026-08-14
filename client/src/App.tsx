@@ -7,7 +7,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { OnboardingGuard } from "./components/OnboardingGuard";
 import Navigation from "./components/Navigation";
 import Footer from "./components/Footer";
-import BasirWidget from "./components/BasirWidget";
 import Home from "./pages/Home";
 
 // Lazy-loaded (code-split) route components — every page besides the
@@ -60,6 +59,7 @@ const TermsOfUse = lazy(() => import("./pages/TermsOfUse"));
 const MeetingsSettings = lazy(() => import("./pages/MeetingsSettings"));
 const MeetingRoom = lazy(() => import("./pages/MeetingRoom"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const BasirWidget = lazy(() => import("./components/BasirWidget"));
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -150,7 +150,9 @@ function App() {
               </OnboardingGuard>
             </main>
             <Footer />
-            <BasirWidget />
+            <Suspense fallback={null}>
+              <BasirWidget />
+            </Suspense>
           </div>
         </TooltipProvider>
       </ThemeProvider>
