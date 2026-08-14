@@ -9,7 +9,7 @@ import { trpc } from "@/lib/trpc";
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const [location] = useLocation();
   const { data: aiSettings } = trpc.basir.getSettings.useQuery();
   const aiEnabled = aiSettings?.enabled ?? false;
@@ -120,6 +120,11 @@ export default function Navigation() {
                   {isLoggingOut ? "جاري الخروج..." : "تسجيل الخروج"}
                 </Button>
               </div>
+            ) : loading ? (
+              <div
+                aria-label="جار التحقق من الجلسة"
+                className="h-10 w-20 rounded-md bg-muted animate-pulse hidden sm:inline-flex"
+              />
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/login">
@@ -198,6 +203,8 @@ export default function Navigation() {
                     {isLoggingOut ? "جاري الخروج..." : "تسجيل الخروج"}
                   </Button>
                 </>
+              ) : loading ? (
+                <div className="h-10 rounded-md bg-muted animate-pulse" />
               ) : (
                 <div className="space-y-2">
                   <Link href="/login" className="block" onClick={() => setIsOpen(false)}>
