@@ -39,6 +39,7 @@ const PUBLIC_CONTENT_PROCEDURES = new Set([
   "/externalLinks.getByType",
   "/teamMembers.list",
 ]);
+const PUBLIC_CONTENT_CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300";
 
 // These responses are public editorial content. Cache them at Vercel's CDN
 // for 60 seconds and serve a five-minute stale copy while one request refreshes
@@ -50,7 +51,11 @@ app.use("/api/trpc", (req, res, next) => {
     !req.headers.cookie &&
     PUBLIC_CONTENT_PROCEDURES.has(req.path)
   ) {
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    // Vercel consumes this targeted header at the edge. Keep the browser at
+    // max-age=0 so content edits are visible on the next visit, while the
+    // globally shared CDN cache shields the function and database.
+    res.setHeader("Vercel-CDN-Cache-Control", PUBLIC_CONTENT_CDN_CACHE);
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
   } else {
     res.setHeader("Cache-Control", "private, no-store");
   }

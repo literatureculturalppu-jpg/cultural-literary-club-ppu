@@ -21,6 +21,7 @@ describe("production performance contracts", () => {
   it("sets short shared caching only for explicitly public content", () => {
     const entry = read("api/index.ts");
     const mobileRoutes = read("server/routes/mobile.ts");
+    expect(entry).toContain("Vercel-CDN-Cache-Control");
     expect(entry).toContain("s-maxage=60, stale-while-revalidate=300");
     expect(entry).toContain("!req.headers.cookie");
     expect(mobileRoutes).toContain("cachePublicContent");

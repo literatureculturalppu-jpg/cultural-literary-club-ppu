@@ -9,7 +9,8 @@ import { sendMobilePushToUsers } from "../services/mobilePush.js";
 import { notifyUserEvent } from "../services/notify.js";
 
 const BASE = "/api/mobile/v1";
-const WEB_SESSION_HANDOFF = "club-webview-session";
+const SESSION_COOKIE = "club_web_session";
+const PUBLIC_CONTENT_CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300";
 const CONTENT_KINDS = ["article", "activity", "achievement", "book"] as const;
 type ContentKind = (typeof CONTENT_KINDS)[number];
 
@@ -92,7 +93,8 @@ export function registerMobileRoutes(app: Express) {
   // cache protects the mobile feed from cold database work while stale-while-
   // revalidate makes content updates visible quickly without blocking readers.
   const cachePublicContent = (_req: Request, res: Response, next: () => void) => {
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    res.setHeader("Vercel-CDN-Cache-Control", PUBLIC_CONTENT_CDN_CACHE);
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
     next();
   };
 
