@@ -5,6 +5,7 @@ import { Suspense, lazy, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { OnboardingGuard } from "./components/OnboardingGuard";
+import PublicPageSeo from "./components/PublicPageSeo";
 import Navigation from "./components/Navigation";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -147,6 +148,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <ScrollToTop />
+          <PublicPageSeo />
           <div className="flex flex-col min-h-screen">
             <Navigation />
             <main className="flex-1">
