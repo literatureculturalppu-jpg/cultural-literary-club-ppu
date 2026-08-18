@@ -23,6 +23,15 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/about", "destination": "/about/index.html" },
+    { "source": "/activities", "destination": "/activities/index.html" },
+    { "source": "/articles", "destination": "/articles/index.html" },
+    { "source": "/achievements", "destination": "/achievements/index.html" },
+    { "source": "/books", "destination": "/books/index.html" },
+    { "source": "/teams", "destination": "/teams/index.html" },
+    { "source": "/quick-links", "destination": "/quick-links/index.html" },
+    { "source": "/privacy-policy", "destination": "/privacy-policy/index.html" },
+    { "source": "/terms-of-use", "destination": "/terms-of-use/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "crons": [
@@ -31,3 +40,4 @@
     { "path": "/api/cron/worklogs-cleanup", "schedule": "0 5 * * *" }
   ]
 }
+
