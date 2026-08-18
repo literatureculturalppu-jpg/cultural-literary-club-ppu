@@ -88,7 +88,16 @@ export default function Footer() {
               </Link>
             </div>
             <p>
-              جميع الحقوق محفوظة 2026 النادي الثقافي الأدبي - جامعة بوليتكنك فلسطين ،تصميم وتطوير : أحمد كامل عيده.
+              جميع الحقوق محفوظة 2026 النادي الثقافي الأدبي - جامعة بوليتكنك فلسطين ،تصميم وتطوير :{" "}
+              <a
+                href="https://ahmad-eideh-portfolio.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline-offset-2 hover:underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                أحمد كامل عيده
+              </a>
+              .
             </p>
           </div>
         </div>
