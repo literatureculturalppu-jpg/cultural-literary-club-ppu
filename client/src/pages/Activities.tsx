@@ -5,11 +5,12 @@ import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar, MapPin, Clock, ChevronDown, ChevronUp,
-  Link2, FileText, Tag, UserCheck, UserPlus, X, Users, Pin, Search
+  Link2, FileText, Tag, UserCheck, UserPlus, Users, Pin, Search
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import ShareButtons from "@/components/ShareButtons";
+import ActivityRegistrationModal from "@/components/ActivityRegistrationModal";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
@@ -44,95 +45,6 @@ function formatDate(d: Date | string) {
 }
 function formatTime(d: Date | string) {
   return new Date(d).toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
-}
-
-const inputClass = "w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent text-sm";
-
-// ─── Guest Registration Modal ─────────────────────────────────────────────────
-function RegistrationModal({ activity, onClose }: { activity: { id: number; title: string }; onClose: () => void }) {
-  const [, setLocation] = useLocation();
-  const [mode, setMode] = useState<"choose" | "guest">("choose");
-  const [form, setForm] = useState({
-    fullName: "", universityEmail: "", universityId: "",
-    college: "", specialization: "", academicYear: "",
-    phoneNumber: "", whatsapp: "",
-  });
-
-  const guestRegister = trpc.activityRegistrations.registerGuest.useMutation({
-    onSuccess: () => { toast.success("تم إرسال طلب تسجيلك! سيتم مراجعته من قبل الإدارة."); onClose(); },
-    onError: e => toast.error("حدث خطأ: " + e.message),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.fullName || !form.universityEmail || !form.universityId || !form.phoneNumber) {
-      toast.error("يرجى ملء الحقول المطلوبة"); return;
-    }
-    guestRegister.mutate({ activityId: activity.id, ...form });
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
-      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md my-4">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h2 className="text-lg font-bold text-foreground">التسجيل في: {activity.title}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-5">
-          {mode === "choose" ? (
-            <div className="space-y-3">
-              <p className="text-muted-foreground text-sm mb-4">اختر طريقة التسجيل:</p>
-              <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                onClick={() => { setLocation("/login"); onClose(); }}>
-                <UserCheck className="w-4 h-4 ml-2" />المتابعة كعضو
-                <span className="text-xs opacity-75 mr-1">(يتطلب تسجيل الدخول)</span>
-              </Button>
-              <Button variant="outline" className="w-full" onClick={() => setMode("guest")}>
-                <UserPlus className="w-4 h-4 ml-2" />المتابعة كضيف
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <button type="button" onClick={() => setMode("choose")} className="text-sm text-accent hover:underline flex items-center gap-1 mb-1">← رجوع</button>
-              <div><label className="block text-xs font-medium mb-1">الاسم الكامل <span className="text-red-500">*</span></label>
-                <input type="text" value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})} className={inputClass} placeholder="الاسم الرباعي" /></div>
-              <div><label className="block text-xs font-medium mb-1">البريد الجامعي <span className="text-red-500">*</span></label>
-                <input type="email" value={form.universityEmail} onChange={e => setForm({...form, universityEmail: e.target.value})} className={inputClass} placeholder="example@university.edu" dir="ltr" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium mb-1">الرقم الجامعي <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.universityId} onChange={e => setForm({...form, universityId: e.target.value})} className={inputClass} placeholder="220XXXXX" dir="ltr" /></div>
-                <div><label className="block text-xs font-medium mb-1">الكلية</label>
-                  <input type="text" value={form.college} onChange={e => setForm({...form, college: e.target.value})} className={inputClass} placeholder="كلية الآداب" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium mb-1">التخصص</label>
-                  <input type="text" value={form.specialization} onChange={e => setForm({...form, specialization: e.target.value})} className={inputClass} placeholder="التخصص" /></div>
-                <div><label className="block text-xs font-medium mb-1">سنة الدراسة</label>
-                  <select value={form.academicYear} onChange={e => setForm({...form, academicYear: e.target.value})} className={inputClass}>
-                    <option value="">اختر</option>
-                    <option value="first">الأولى</option>
-                    <option value="second">الثانية</option>
-                    <option value="third">الثالثة</option>
-                    <option value="fourth">الرابعة</option>
-                    <option value="postgraduate">دراسات عليا</option>
-                  </select></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium mb-1">رقم الهاتف <span className="text-red-500">*</span></label>
-                  <input type="tel" value={form.phoneNumber} onChange={e => setForm({...form, phoneNumber: e.target.value})} className={inputClass} placeholder="+970XXXXXXXX" dir="ltr" /></div>
-                <div><label className="block text-xs font-medium mb-1">رقم الواتساب</label>
-                  <input type="tel" value={form.whatsapp} onChange={e => setForm({...form, whatsapp: e.target.value})} className={inputClass} placeholder="+970XXXXXXXX" dir="ltr" /></div>
-              </div>
-              <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={guestRegister.isPending}>
-                {guestRegister.isPending ? "جاري الإرسال..." : "إرسال طلب التسجيل"}
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">سيتم مراجعة طلبك من قبل الإدارة</p>
-            </form>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ─── Activity Card ────────────────────────────────────────────────────────────
@@ -171,8 +83,11 @@ function ActivityCard({ activity }: { activity: any }) {
   return (
     <>
       {showModal && (
-        <RegistrationModal activity={{ id: activity.id, title: activity.title }}
-          onClose={() => { setShowModal(false); refetchSub(); }} />
+        <ActivityRegistrationModal
+          activity={{ id: activity.id, title: activity.title }}
+          onRegistered={() => { void refetchSub(); }}
+          onClose={() => { setShowModal(false); void refetchSub(); }}
+        />
       )}
 
       <Card className={`overflow-hidden hover:shadow-lg transition-all duration-200 flex flex-col ${activity.isPinned ? "ring-2 ring-accent" : ""}`}>

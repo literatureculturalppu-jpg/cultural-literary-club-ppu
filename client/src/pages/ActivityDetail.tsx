@@ -1,9 +1,12 @@
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin, Link2, FileText, Tag, ArrowRight } from "lucide-react";
+import { Calendar, Clock, MapPin, Link2, FileText, Tag, ArrowRight, UserCheck, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
+import ActivityRegistrationModal from "@/components/ActivityRegistrationModal";
 
 interface ActivityContent {
   category?: string;
@@ -54,7 +57,22 @@ function formatDateTime(date: Date | string) {
 
 export default function ActivityDetail() {
   const params = useParams<{ id: string }>();
-  const { data: activity, isLoading } = trpc.activities.getById.useQuery(parseInt(params.id || "0"));
+  const activityId = Number.parseInt(params.id || "", 10);
+  const { data: activity, isLoading } = trpc.activities.getById.useQuery(activityId);
+  const { user } = useAuth();
+  const [showRegistration, setShowRegistration] = useState(false);
+  const { data: isSubscribed, refetch: refetchSubscription } = trpc.activities.isSubscribed.useQuery(
+    { activityId },
+    { enabled: Boolean(user) && Number.isInteger(activityId) },
+  );
+  const memberSubscribe = trpc.activities.subscribe.useMutation({
+    onSuccess: () => { toast.success("تم إرسال طلب تسجيلك وسيظهر لدى إدارة النشاط للمراجعة."); void refetchSubscription(); },
+    onError: (error) => toast.error(`تعذر إرسال طلب التسجيل: ${error.message}`),
+  });
+  const unsubscribe = trpc.activities.unsubscribe.useMutation({
+    onSuccess: () => { toast.success("تم إلغاء طلب التسجيل."); void refetchSubscription(); },
+    onError: (error) => toast.error(`تعذر إلغاء التسجيل: ${error.message}`),
+  });
 
   if (isLoading) return <div className="container py-16 text-center">جاري التحميل...</div>;
   if (!activity) return <div className="container py-16 text-center">النشاط غير موجود</div>;
@@ -63,6 +81,20 @@ export default function ActivityDetail() {
   const contentData = parseContent(activity.content);
   const hasLinks = contentData.links && contentData.links.length > 0;
   const hasPdf = !!contentData.pdf;
+  const canManageRegistrations = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
+  const registrationClosed = status === "completed";
+
+  const handleRegistration = () => {
+    if (registrationClosed) {
+      toast.error("انتهت فترة التسجيل لهذا النشاط.");
+      return;
+    }
+    if (user) {
+      memberSubscribe.mutate(activityId);
+      return;
+    }
+    setShowRegistration(true);
+  };
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -130,6 +162,32 @@ export default function ActivityDetail() {
             )}
           </div>
 
+          <section className="rounded-xl border border-border bg-muted/20 p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">التسجيل في النشاط</h2>
+                <p className="mt-1 text-sm text-muted-foreground">أرسل طلبك ليظهر مباشرة لدى إدارة النشاط للمراجعة والقبول.</p>
+              </div>
+              <Users className="h-6 w-6 shrink-0 text-accent" />
+            </div>
+            {registrationClosed ? (
+              <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">انتهت فترة التسجيل لهذا النشاط.</p>
+            ) : isSubscribed ? (
+              <Button variant="outline" className="w-full border-red-200 text-red-600 hover:bg-red-50" onClick={() => unsubscribe.mutate(activityId)} disabled={unsubscribe.isPending}>
+                <UserCheck className="ml-2 h-4 w-4" />{unsubscribe.isPending ? "جاري الإلغاء..." : "إلغاء طلب التسجيل"}
+              </Button>
+            ) : (
+              <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleRegistration} disabled={memberSubscribe.isPending}>
+                <UserPlus className="ml-2 h-4 w-4" />{memberSubscribe.isPending ? "جاري الإرسال..." : "التسجيل في النشاط"}
+              </Button>
+            )}
+            {canManageRegistrations && (
+              <Link href={`/admin/activities/${activityId}/registrations`}>
+                <Button variant="outline" className="mt-3 w-full"><Users className="ml-2 h-4 w-4" />عرض طلبات قبول المسجلين</Button>
+              </Link>
+            )}
+          </section>
+
           {/* Description */}
           <div>
             <h2 className="text-lg font-bold text-foreground mb-3">وصف النشاط</h2>
@@ -183,6 +241,13 @@ export default function ActivityDetail() {
           )}
         </div>
       </section>
+      {showRegistration && (
+        <ActivityRegistrationModal
+          activity={{ id: activityId, title: activity.title }}
+          onRegistered={() => void refetchSubscription()}
+          onClose={() => setShowRegistration(false)}
+        />
+      )}
     </div>
   );
 }

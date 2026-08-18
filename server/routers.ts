@@ -1,7 +1,7 @@
  import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
+import { activityApproverProcedure, publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
 import { TRPCError } from "@trpc/server";
 
 import { z } from "zod";
@@ -544,6 +544,13 @@ export const appRouter = router({
     subscribe: protectedProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
+        const activity = await getActivityById(input);
+        if (!activity) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "النشاط غير موجود." });
+        }
+        if (await isUserSubscribedToActivity(input, ctx.user.id)) {
+          throw new TRPCError({ code: "CONFLICT", message: "تم إرسال طلب تسجيلك لهذا النشاط مسبقًا." });
+        }
         const result = await createActivitySubscription({
           userId: ctx.user.id,
           activityId: input,
@@ -3047,6 +3054,16 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
+        const activity = await getActivityById(input.activityId);
+        if (!activity) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "النشاط غير موجود." });
+        }
+        const normalizedEmail = input.universityEmail.trim().toLowerCase();
+        const normalizedUniversityId = input.universityId.trim();
+        const existing = await getGuestRegistrationsByActivity(input.activityId);
+        if (existing.some((entry) => entry.universityEmail.trim().toLowerCase() === normalizedEmail || entry.universityId.trim() === normalizedUniversityId)) {
+          throw new TRPCError({ code: "CONFLICT", message: "تم إرسال طلب تسجيل سابق لهذا النشاط بهذه البيانات." });
+        }
         const result = await createGuestActivityRegistration(input);
         recordWorkLog({
           scope: "member",
@@ -3060,7 +3077,7 @@ export const appRouter = router({
         return result;
       }),
 
-    getForActivity: adminProcedure
+    getForActivity: activityApproverProcedure
       .input(z.number())
       .query(async ({ input }) => {
         const [members, guests] = await Promise.all([
@@ -3070,7 +3087,7 @@ export const appRouter = router({
         return { members, guests };
       }),
 
-    approveSubscription: adminProcedure
+    approveSubscription: activityApproverProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         const result = await approveActivitySubscription(input);
@@ -3096,7 +3113,7 @@ export const appRouter = router({
         return result;
       }),
 
-    rejectSubscription: adminProcedure
+    rejectSubscription: activityApproverProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         const result = await rejectActivitySubscription(input);
@@ -3112,7 +3129,7 @@ export const appRouter = router({
         return result;
       }),
 
-    approveGuest: adminProcedure
+    approveGuest: activityApproverProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         const result = await approveGuestRegistration(input);
@@ -3143,7 +3160,7 @@ export const appRouter = router({
         return result;
       }),
 
-    rejectGuest: adminProcedure
+    rejectGuest: activityApproverProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         const result = await rejectGuestRegistration(input);

@@ -85,6 +85,21 @@ export const adminProcedure = protectedProcedure.use(
   }),
 );
 
+// يقتصر هذا الاستثناء على قبول طلبات الأنشطة فقط. يحتاج المشرف إلى مراجعة
+// المسجلين في النشاط، لكنه لا يكتسب بذلك صلاحيات إدارة المحتوى العامة.
+export const activityApproverProcedure = protectedProcedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    }
+    if (!["admin", "general_agent", "tech_admin", "supervisor"].includes(ctx.user.role)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({ ctx });
+  }),
+);
+
 // Technical-manager-only procedure — requires role "tech_admin" exactly.
 // Used for the "سجلات العمل" (work logs) audit trail, which is intentionally
 // invisible to plain admins and general agents. Built on top of
