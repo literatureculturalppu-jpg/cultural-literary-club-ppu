@@ -10,7 +10,7 @@ import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
 import {
   Search, BookOpen, CheckCircle2, XCircle, Star, Plus, Trash2, Vote,
   Lock, Unlock, ExternalLink, Download, Sparkles, ImagePlus, X, BookMarked,
-  Calendar as CalendarIcon, Layers, Hash,
+  Calendar as CalendarIcon, Layers, Hash, Pin,
 } from "lucide-react";
 
 const inputClass = "w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent text-sm";
@@ -307,6 +307,10 @@ function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
     onSuccess: () => { toast.success("تم حذف الكتاب"); refetch(); },
     onError: (e) => toast.error("خطأ: " + e.message),
   });
+  const togglePin = trpc.contentPins.toggle.useMutation({
+    onSuccess: (_, variables) => { toast.success(variables.isPinned ? "تم تثبيت الكتاب" : "تم إلغاء تثبيت الكتاب"); refetch(); },
+    onError: (error) => toast.error(error.message),
+  });
 
   const startEdit = (b: any) => {
     setEditing(b);
@@ -548,6 +552,7 @@ function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
                 <div className="absolute top-2 right-2 bg-accent text-accent-foreground text-[10px] font-bold px-2 py-1 rounded-full shadow-md flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> مختوم
                 </div>
+                {b.isPinned ? <div className="absolute top-9 right-2 bg-background/95 border border-accent/40 text-accent text-[10px] font-bold px-2 py-1 rounded-full shadow-sm flex items-center gap-1"><Pin className="w-3 h-3 fill-current" /> مثبت</div> : null}
                 {b.clubRating && (
                   <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
                     <StarRating value={b.clubRating} />
@@ -556,6 +561,7 @@ function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
                 {isAdmin && (
                   <div className="absolute top-2 left-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={(e) => { e.stopPropagation(); startEdit(b); }} className="bg-black/60 hover:bg-black/80 text-white text-[10px] px-2 py-1 rounded">تعديل</button>
+                    <button onClick={(e) => { e.stopPropagation(); togglePin.mutate({ type: "book", id: b.id, isPinned: !b.isPinned }); }} className="bg-accent/90 hover:bg-accent text-accent-foreground text-[10px] px-2 py-1 rounded flex items-center gap-1"><Pin className={`w-3 h-3 ${b.isPinned ? "fill-current" : ""}`} /> {b.isPinned ? "إلغاء التثبيت" : "تثبيت"}</button>
                     <button onClick={(e) => { e.stopPropagation(); if (confirm("حذف هذا الكتاب؟")) deleteBook.mutate(b.id); }} className="bg-destructive/80 hover:bg-destructive text-white text-[10px] px-2 py-1 rounded">حذف</button>
                   </div>
                 )}

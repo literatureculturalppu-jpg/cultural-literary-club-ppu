@@ -459,9 +459,8 @@ export async function getArticles() {
     return [];
   }
 
-  // Newest first (by creation date) so the most recently published
-  // article appears at the top of the list.
-  return await db.select().from(articles).orderBy(desc(articles.createdAt));
+  // Pinned articles always precede the newest remaining content.
+  return await db.select().from(articles).orderBy(desc(articles.isPinned), desc(articles.createdAt));
 }
 
 export async function getArticleById(id: number) {
@@ -677,9 +676,8 @@ export async function getAchievements() {
     return [];
   }
 
-  // Newest first (by creation date) so the most recently added
-  // achievement appears at the top of the list.
-  return await db.select().from(achievements).orderBy(desc(achievements.createdAt));
+  // Pinned achievements always precede the newest remaining content.
+  return await db.select().from(achievements).orderBy(desc(achievements.isPinned), desc(achievements.createdAt));
 }
 
 export async function getAchievementById(id: number) {
@@ -2260,12 +2258,33 @@ export async function toggleActivityPin(id: number, isPinned: boolean) {
   return { success: true };
 }
 
+export async function toggleArticlePin(id: number, isPinned: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(articles).set({ isPinned } as any).where(eq(articles.id, id));
+  return { success: true };
+}
+
+export async function toggleAchievementPin(id: number, isPinned: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(achievements).set({ isPinned } as any).where(eq(achievements.id, id));
+  return { success: true };
+}
+
+export async function toggleBookPin(id: number, isPinned: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(books).set({ isPinned } as any).where(eq(books.id, id));
+  return { success: true };
+}
+
 // ─── Books: "الكتب المختومة" (books the club has read) ─────────────────────
 
 export async function getBooks() {
   const db = await getDb();
   if (!db) { console.warn("[Database] Cannot get books: database not available"); return []; }
-  return await db.select().from(books).orderBy(books.order, desc(books.completedAt));
+  return await db.select().from(books).orderBy(desc(books.isPinned), books.order, desc(books.completedAt));
 }
 
 export async function getBookById(id: number) {

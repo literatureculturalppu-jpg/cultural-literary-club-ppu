@@ -134,6 +134,7 @@ export const articles = pgTable("articles", {
   imageUrl: varchar("imageUrl", { length: 500 }), // S3 URL for article cover image
   imageKey: varchar("imageKey", { length: 255 }), // S3 key for tracking
   published: boolean("published").default(false).notNull(),
+  isPinned: boolean("isPinned").default(false).notNull(),
   createdBy: integer("createdBy").notNull(), // Reference to users.id
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -222,6 +223,7 @@ export const achievements = pgTable("achievements", {
   articleId: integer("articleId"), // Optional link to a related article (articles.id)
   order: integer("order").default(0), // For sorting display order
   featured: boolean("featured").default(false).notNull(), // Whether to feature on homepage
+  isPinned: boolean("isPinned").default(false).notNull(),
   createdBy: integer("createdBy").notNull(), // Reference to users.id
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -581,6 +583,7 @@ export const books = pgTable("books", {
   isbn: varchar("isbn", { length: 32 }),
   createdBy: integer("createdBy"),
   order: integer("order").default(0),
+  isPinned: boolean("isPinned").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });

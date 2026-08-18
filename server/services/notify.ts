@@ -43,7 +43,7 @@ export async function notifyContentCreated(params: NotifyContentCreatedParams): 
     void sendMobilePushToUsers(recipients.map((recipient) => recipient.id), {
       title: notificationTitle,
       body: params.excerpt,
-      data: { url: params.relativeUrl, type: params.type, entityId: params.entityId },
+      data: { targetUrl: params.relativeUrl, url: params.relativeUrl, type: params.type, entityId: params.entityId },
     });
 
     console.log(`[notify] Sent ${recipients.length} notifications for ${params.type} "${params.title}"`);
@@ -133,7 +133,7 @@ export async function notifyUserEvent(
       void sendMobilePushToUsers([userId], {
         title: params.title,
         body: params.body ?? "لديك تحديث جديد في حسابك.",
-        data: { url: params.url, type: params.type ?? "user_event", entityId: params.entityId, private: true },
+        data: { targetUrl: params.url, url: params.url, type: params.type ?? "user_event", entityId: params.entityId, private: true },
       });
     }
   } catch (error) {
@@ -177,12 +177,12 @@ export async function notifyBookCreated(bookId: number, bookTitle: string, autho
       entityId: bookId,
       title,
       body: author,
-      url: `/books/${bookId}`,
+      url: `/books/club/${bookId}`,
     });
     void sendMobilePushToUsers(recipients.map((recipient) => recipient.id), {
       title,
       body: author,
-      data: { url: `/books/${bookId}`, type: "book", entityId: bookId },
+      data: { targetUrl: `/books/club/${bookId}`, url: `/books/club/${bookId}`, type: "book", entityId: bookId },
     });
     await sendBulkEmail(recipients, `كتاب جديد: ${bookTitle}`, bookEmailTemplate({ bookTitle, author }), EmailPriority.BOOK);
   } catch (error) {

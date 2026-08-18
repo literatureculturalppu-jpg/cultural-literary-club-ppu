@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Award, Calendar, Building2, Search } from "lucide-react";
+import { Award, Calendar, Building2, Search, Pin } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
 import ShareButtons from "@/components/ShareButtons";
@@ -11,9 +12,13 @@ import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
 import { useState } from "react";
 
 export default function Achievements() {
-  const { data: achievements, isLoading } = trpc.achievements.list.useQuery();
+  const { data: achievements, isLoading, refetch } = trpc.achievements.list.useQuery();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
+  const togglePin = trpc.contentPins.toggle.useMutation({
+    onSuccess: (_, variables) => { toast.success(variables.isPinned ? "تم تثبيت الإنجاز" : "تم إلغاء تثبيت الإنجاز"); refetch(); },
+    onError: (error) => toast.error(error.message),
+  });
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -111,7 +116,7 @@ export default function Achievements() {
                 filtered.slice(0, visibleCount).map((achievement) => (
                   <Card
                     key={achievement.id}
-                    className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col"
+                    className={`overflow-hidden hover:shadow-lg transition-shadow flex flex-col ${achievement.isPinned ? "ring-1 ring-accent/60" : ""}`}
                   >
                     {achievement.imageUrl && (
                       <div className="relative h-48 overflow-hidden bg-gray-100">
@@ -122,6 +127,7 @@ export default function Achievements() {
                         <div className="absolute top-0 right-0 p-3">
                           <Award className="w-6 h-6 text-yellow-500 drop-shadow" />
                         </div>
+                        {achievement.isPinned ? <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground"><Pin className="w-3 h-3 ml-1 fill-current" /> مثبت</Badge> : null}
                       </div>
                     )}
                     <div className="p-6 flex flex-col flex-1">
@@ -129,6 +135,7 @@ export default function Achievements() {
                         <h3 className="text-xl font-bold text-foreground flex-1">
                           {achievement.title}
                         </h3>
+                        {!achievement.imageUrl && achievement.isPinned ? <Pin className="w-4 h-4 text-accent fill-current shrink-0" aria-label="إنجاز مثبت" /> : null}
                       </div>
 
                       <Badge className={`w-fit mb-3 ${getCategoryColor(achievement.category)}`}>
@@ -182,8 +189,11 @@ export default function Achievements() {
                         />
                         {(user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin") && (
                           <div className="flex gap-2">
+                            <Button variant="outline" size="icon" title={achievement.isPinned ? "إلغاء تثبيت الإنجاز" : "تثبيت الإنجاز"} onClick={() => togglePin.mutate({ type: "achievement", id: achievement.id, isPinned: !achievement.isPinned })}>
+                              <Pin className={`w-4 h-4 ${achievement.isPinned ? "fill-current text-accent" : ""}`} />
+                            </Button>
                             <Link href={`/admin/achievements/${achievement.id}/edit`}>
-                              <Button variant="outline" className="w-full text-xs">
+                              <Button variant="outline" className="flex-1 text-xs">
                                 تعديل
                               </Button>
                             </Link>

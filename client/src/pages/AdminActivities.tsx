@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Calendar, MapPin, Trash2, Edit2, Plus, Tag, Link2, FileText, Clock } from "lucide-react";
+import { Calendar, MapPin, Trash2, Edit2, Plus, Tag, Link2, FileText, Clock, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 
 interface ActivityContent {
@@ -199,6 +199,12 @@ export default function AdminActivities() {
                         </div>
                       </div>
                       <div className="flex gap-2 shrink-0">
+                        <Link href={`/admin/activities/${activity.id}/registrations`}>
+                          <Button variant="outline" size="sm" title="طلبات قبول المسجلين">
+                            <UsersRound className="w-4 h-4 ml-1" />
+                            <span className="hidden sm:inline">المسجلون</span>
+                          </Button>
+                        </Link>
                         <Link href={`/admin/activities/${activity.id}/edit`}>
                           <Button variant="outline" size="sm">
                             <Edit2 className="w-4 h-4" />

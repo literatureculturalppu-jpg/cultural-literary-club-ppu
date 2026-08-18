@@ -37,6 +37,7 @@ const ArticleDetail = lazy(() => import("./pages/ArticleDetail"));
 const AchievementDetail = lazy(() => import("./pages/AchievementDetail"));
 const Books = lazy(() => import("./pages/Books"));
 const BookDetail = lazy(() => import("./pages/BookDetail"));
+const ClubBookDetail = lazy(() => import("./pages/ClubBookDetail"));
 const MyTeam = lazy(() => import("./pages/MyTeam"));
 const TeamMembers = lazy(() => import("./pages/TeamMembers"));
 const AdminTeams = lazy(() => import("./pages/AdminTeams"));
@@ -125,6 +126,7 @@ function Router() {
         <Route path={"/activities/:id"} component={ActivityDetail} />
         <Route path={"/articles/:id"} component={ArticleDetail} />
         <Route path={"/achievements/:id"} component={AchievementDetail} />
+        <Route path={"/books/club/:id"} component={ClubBookDetail} />
         <Route path={"/books"} component={Books} />
         <Route path={"/books/google/:id"} component={BookDetail} />
         <Route path={"/basir"} component={BasirChat} />

@@ -36,6 +36,7 @@ function publicUser(user: NonNullable<Awaited<ReturnType<typeof db.getUserById>>
 }
 
 function contentUrl(kind: ContentKind, id: number) {
+  if (kind === "book") return `/books/club/${id}`;
   const plural: Record<ContentKind, string> = { article: "articles", activity: "activities", achievement: "achievements", book: "books" };
   return `/${plural[kind]}/${id}`;
 }

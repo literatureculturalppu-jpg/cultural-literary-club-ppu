@@ -40,7 +40,7 @@ export default function AdminActivityRegistrations() {
           <div className="flex items-center gap-4 mb-4">
             <Link href="/activities"><Button variant="outline" size="sm"><ArrowRight className="w-4 h-4" /></Button></Link>
             <div>
-              <h1 className="text-3xl font-bold">المسجلون في النشاط</h1>
+              <h1 className="text-3xl font-bold">طلبات قبول المسجلين في النشاط</h1>
               {activity && <p className="text-muted-foreground mt-1">{activity.title}</p>}
             </div>
           </div>

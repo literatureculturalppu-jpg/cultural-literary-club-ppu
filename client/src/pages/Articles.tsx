@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, User, Clock, Tag, Search } from "lucide-react";
+import { Calendar, User, Clock, Tag, Search, Pin } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link } from "wouter";
 import ShareButtons from "@/components/ShareButtons";
 import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
 import { useState } from "react";
+import { toast } from "sonner";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 interface RichContent {
@@ -47,7 +48,7 @@ function formatDate(date: Date | string) {
 }
 
 // ─── Article Card ─────────────────────────────────────────────────────────────
-function ArticleCard({ article }: { article: any }) {
+function ArticleCard({ article, onTogglePin }: { article: any; onTogglePin: (id: number, isPinned: boolean) => void }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
   const rich = parseRichContent(article.content);
@@ -56,7 +57,7 @@ function ArticleCard({ article }: { article: any }) {
   const additionalImages = rich?.images?.slice(1) ?? []; // صور إضافية غير الغلاف
 
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-all duration-200 flex flex-col">
+    <Card className={`overflow-hidden hover:shadow-lg transition-all duration-200 flex flex-col ${article.isPinned ? "ring-1 ring-accent/60" : ""}`}>
       {/* صورة الغلاف */}
       {article.imageUrl && (
         <div className="relative overflow-hidden bg-muted">
@@ -65,12 +66,16 @@ function ArticleCard({ article }: { article: any }) {
           <div className="absolute top-3 right-3 flex gap-2 flex-wrap">
             <CategoryBadge category={article.category} />
           </div>
+          {article.isPinned ? <Badge className="absolute top-3 left-3 bg-accent text-accent-foreground"><Pin className="w-3 h-3 ml-1 fill-current" /> مثبت</Badge> : null}
         </div>
       )}
 
       <div className="p-5 flex flex-col flex-1">
         {/* العنوان */}
-        <h3 className="text-lg font-bold text-foreground leading-snug mb-1">{article.title}</h3>
+        <div className="flex items-start gap-2 mb-1">
+          <h3 className="text-lg font-bold text-foreground leading-snug flex-1">{article.title}</h3>
+          {!article.imageUrl && article.isPinned ? <Pin className="w-4 h-4 text-accent fill-current shrink-0" aria-label="مقال مثبت" /> : null}
+        </div>
 
         {/* العنوان الفرعي */}
         {rich?.subtitle && (
@@ -133,11 +138,12 @@ function ArticleCard({ article }: { article: any }) {
             <Link href={`/articles/${article.id}`} className="flex-1">
               <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90">اقرأ المقال</Button>
             </Link>
-            {isAdmin && (
-              <Link href={`/admin/articles/${article.id}/edit`}>
-                <Button variant="outline">تعديل</Button>
-              </Link>
-            )}
+            {isAdmin && <>
+              <Button variant="outline" size="icon" title={article.isPinned ? "إلغاء تثبيت المقال" : "تثبيت المقال"} onClick={() => onTogglePin(article.id, !article.isPinned)}>
+                <Pin className={`w-4 h-4 ${article.isPinned ? "fill-current text-accent" : ""}`} />
+              </Button>
+              <Link href={`/admin/articles/${article.id}/edit`}><Button variant="outline">تعديل</Button></Link>
+            </>}
           </div>
         </div>
       </div>
@@ -147,10 +153,14 @@ function ArticleCard({ article }: { article: any }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Articles() {
-  const { data: articles, isLoading } = trpc.articles.list.useQuery();
+  const { data: articles, isLoading, refetch } = trpc.articles.list.useQuery();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
   const [query, setQuery] = useState("");
+  const togglePin = trpc.contentPins.toggle.useMutation({
+    onSuccess: (_, variables) => { toast.success(variables.isPinned ? "تم تثبيت المقال" : "تم إلغاء تثبيت المقال"); refetch(); },
+    onError: (error) => toast.error(error.message),
+  });
 
   const filtered = (articles ?? []).filter((a: any) => {
     if (!query.trim()) return true;
@@ -209,7 +219,7 @@ export default function Articles() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.length > 0
-                ? filtered.slice(0, visibleCount).map((a: any) => <ArticleCard key={a.id} article={a} />)
+                ? filtered.slice(0, visibleCount).map((a: any) => <ArticleCard key={a.id} article={a} onTogglePin={(id, isPinned) => togglePin.mutate({ type: "article", id, isPinned })} />)
                 : (
                   <div className="col-span-full text-center py-12">
                     <p className="text-muted-foreground text-lg">

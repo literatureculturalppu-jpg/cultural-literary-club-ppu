@@ -124,6 +124,9 @@ import {
   approveGuestRegistration,
   rejectGuestRegistration,
   toggleActivityPin,
+  toggleArticlePin,
+  toggleAchievementPin,
+  toggleBookPin,
   countGeneralAgentUsers,
   MIN_GENERAL_AGENTS,
   getBooks,
@@ -3412,6 +3415,28 @@ export const appRouter = router({
     toggle: adminProcedure
       .input(z.object({ id: z.number(), isPinned: z.boolean() }))
       .mutation(async ({ input }) => toggleActivityPin(input.id, input.isPinned)),
+  }),
+
+  contentPins: router({
+    toggle: adminProcedure
+      .input(z.object({ id: z.number().int().positive(), isPinned: z.boolean(), type: z.enum(["article", "achievement", "book"]) }))
+      .mutation(async ({ input, ctx }) => {
+        const result = input.type === "article"
+          ? await toggleArticlePin(input.id, input.isPinned)
+          : input.type === "achievement"
+            ? await toggleAchievementPin(input.id, input.isPinned)
+            : await toggleBookPin(input.id, input.isPinned);
+        recordWorkLog({
+          ctx,
+          scope: "elevated",
+          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
+          action: `${input.type}.${input.isPinned ? "pin" : "unpin"}`,
+          description: `قام ${ctx.user.name || "مستخدم"} ${input.isPinned ? "بتثبيت" : "بإلغاء تثبيت"} ${input.type} رقم ${input.id}`,
+          entityType: input.type,
+          entityId: input.id,
+        });
+        return result;
+      }),
   }),
 
   // ── نظام الاجتماعات الإلكتروني (electronic meetings) ──────────────────────
