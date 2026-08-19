@@ -199,6 +199,7 @@ export default function MembershipCardPanel() {
   const permissions = ROLE_PERMISSIONS[member.role] ?? ROLE_PERMISSIONS.user;
 
   return (
+    <>
     <Card className="overflow-hidden border-accent/40" dir="rtl">
       <CardHeader className="border-b border-accent/20 bg-gradient-to-l from-amber-50 via-background to-amber-50/50">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -214,7 +215,7 @@ export default function MembershipCardPanel() {
       </CardHeader>
       <CardContent className="space-y-6 p-4 sm:p-6">
         <section className="overflow-hidden rounded-2xl border border-amber-400/70 bg-black text-white shadow-xl">
-          <div ref={exportCardRef} className="relative min-h-[330px] bg-[radial-gradient(circle_at_20%_0%,rgba(217,161,59,0.26),transparent_36%),radial-gradient(circle_at_100%_100%,rgba(217,161,59,0.16),transparent_38%)] p-5 sm:p-7">
+          <div className="relative min-h-[330px] bg-[radial-gradient(circle_at_20%_0%,rgba(217,161,59,0.26),transparent_36%),radial-gradient(circle_at_100%_100%,rgba(217,161,59,0.16),transparent_38%)] p-5 sm:p-7">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-300 via-amber-500 to-amber-300" />
             <div className="flex items-start justify-between gap-4" dir="ltr">
               <img src="/club-icon-192.png" alt="شعار النادي" className="h-14 w-14 rounded-xl border border-amber-300/60 bg-black object-contain p-1" />
@@ -399,7 +400,7 @@ export default function MembershipCardPanel() {
                 </div>
               </>
             ) : (
-              <p className="rounded-lg border border-dashed bg-background p-3 text-sm text-muted-foreground">ستستخدم البطاقة صورة الحساب الحالية إن لم تختر صورة محلية.</p>
+              <p className="rounded-lg border border-dashed bg-background p-3 text-sm text-muted-foreground">اختر صورة محلية لتضمينها في ملف البطاقة الذي ستنزّله.</p>
             )}
           </section>
 
@@ -413,5 +414,61 @@ export default function MembershipCardPanel() {
         </DialogContent>
       </Dialog>
     </Card>
+
+    <div
+      ref={exportCardRef}
+      aria-hidden="true"
+      style={{
+        position: "fixed",
+        left: "-10000px",
+        top: 0,
+        width: 900,
+        minHeight: 520,
+        overflow: "hidden",
+        backgroundColor: "#0B1220",
+        color: "#FFFFFF",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      <div style={{ height: 10, backgroundColor: "#C98E22" }} />
+      <div style={{ padding: 42 }}>
+        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <img src="/club-icon-192.png" alt="" style={{ width: 82, height: 82, objectFit: "contain", borderRadius: 14, border: "2px solid #E8C46A", backgroundColor: "#FFFFFF", padding: 5 }} />
+          <div style={{ textAlign: "right" }} dir="rtl">
+            <div style={{ color: "#F6D88E", fontSize: 22 }}>جامعة بوليتكنك فلسطين</div>
+            <div style={{ marginTop: 8, fontSize: 34, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
+            <div style={{ marginTop: 8, color: "#CBD5E1", fontSize: 19 }}>بطاقة عضوية رقمية</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 58 }}>
+          <div style={{ width: 150, height: 150, overflow: "hidden", borderRadius: 75, border: "4px solid #E8C46A", backgroundColor: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {localPhotoUrl ? (
+              <img src={localPhotoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
+            ) : (
+              <span style={{ color: "#F6D88E", fontSize: 56, fontWeight: 700 }}>{(member.arabicFullName || member.name || "ع").trim().charAt(0)}</span>
+            )}
+          </div>
+          <div style={{ maxWidth: 480, textAlign: "right" }} dir="rtl">
+            <div style={{ fontSize: 36, fontWeight: 700 }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
+            <div style={{ marginTop: 12, color: "#F6D88E", fontSize: 22 }}>{member.roleLabel}</div>
+            <div style={{ marginTop: 12, color: "#CBD5E1", fontFamily: "monospace", fontSize: 18 }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 48 }}>
+          <div style={{ textAlign: "right" }} dir="rtl">
+            <div style={{ display: "inline-block", borderRadius: 18, padding: "8px 16px", backgroundColor: member.approvalStatus === "approved" ? "#065F46" : member.approvalStatus === "rejected" ? "#991B1B" : "#92400E", color: "#FFFFFF", fontSize: 18 }}>{status.label}</div>
+            {positions.length > 0 ? <div style={{ marginTop: 16, color: "#E2E8F0", fontSize: 17 }}>{positions.slice(0, 2).join(" • ")}</div> : null}
+          </div>
+          {canVerify ? (
+            <div style={{ borderRadius: 12, backgroundColor: "#FFFFFF", padding: 10 }}><QRCodeSVG value={qrUrl!} size={132} level="M" includeMargin={false} fgColor="#111111" bgColor="#FFFFFF" /></div>
+          ) : (
+            <div style={{ width: 132, height: 132, borderRadius: 12, border: "1px solid #64748B", display: "flex", alignItems: "center", justifyContent: "center", color: "#CBD5E1", fontSize: 15, textAlign: "center", padding: 12 }} dir="rtl">يصدر رمز التحقق بعد اعتماد العضوية</div>
+          )}
+        </div>
+      </div>
+    </div>
+    </>
   );
 }
