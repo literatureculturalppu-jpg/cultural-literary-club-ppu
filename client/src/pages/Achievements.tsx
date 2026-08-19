@@ -74,7 +74,7 @@ export default function Achievements() {
                 استعرض الجوائز والإنجازات التي حققها النادي الثقافي الأدبي
               </p>
             </div>
-            {(user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin") && (
+            {(user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin") && (
               <Link href="/admin/achievements/create">
                 <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
                   إضافة إنجاز
@@ -187,7 +187,7 @@ export default function Achievements() {
                           url={`${window.location.origin}/achievements`}
                           description={achievement.details || ""}
                         />
-                        {(user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin") && (
+                        {(user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin") && (
                           <div className="flex gap-2">
                             <Button variant="outline" size="icon" title={achievement.isPinned ? "إلغاء تثبيت الإنجاز" : "تثبيت الإنجاز"} onClick={() => togglePin.mutate({ type: "achievement", id: achievement.id, isPinned: !achievement.isPinned })}>
                               <Pin className={`w-4 h-4 ${achievement.isPinned ? "fill-current text-accent" : ""}`} />

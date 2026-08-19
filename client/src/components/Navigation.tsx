@@ -5,6 +5,7 @@ import { Menu, X, Bot, UserRound } from "lucide-react";
 import { useState } from "react";
 import { NotificationBell } from "./NotificationBell";
 import { trpc } from "@/lib/trpc";
+import { isAdminTierRole } from "@shared/clubRoles";
 
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
@@ -108,7 +109,7 @@ export default function Navigation() {
                   </Link>
                 )}
                 {!onboardingPending && <NotificationBell />}
-                {!onboardingPending && (user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor" || user?.role === "committee_head") && (
+                {!onboardingPending && (isAdminTierRole(user?.role) || user?.role === "supervisor" || user?.role === "committee_head") && (
                   <Link href="/admin">
                     <Button variant="outline" className="hidden sm:inline-flex">
                       لوحة التحكم
@@ -184,7 +185,7 @@ export default function Navigation() {
                       </Button>
                     </Link>
                   )}
-                  {!onboardingPending && (user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin") && (
+                  {!onboardingPending && (isAdminTierRole(user?.role) || user?.role === "supervisor" || user?.role === "committee_head") && (
                     <Link href="/admin">
                       <Button
                         variant="outline"

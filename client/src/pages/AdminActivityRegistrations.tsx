@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Bell, Loader2, Mail, Send, Trash2, UserCheck, UserPlus, Users } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+import { isAdminTierRole } from "@shared/clubRoles";
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "approved") return <Badge className="bg-green-100 text-green-700">مقبول</Badge>;
@@ -38,7 +39,7 @@ export default function AdminActivityRegistrations() {
   const [broadcastBody, setBroadcastBody] = useState("");
   const [sendPush, setSendPush] = useState(true);
   const [sendEmail, setSendEmail] = useState(true);
-  const canBroadcast = user?.role === "admin" || user?.role === "tech_admin";
+  const canBroadcast = isAdminTierRole(user?.role);
   const broadcastToRegistrants = trpc.activityRegistrations.broadcastToRegistrants.useMutation({
     onSuccess: (result) => {
       const deliverySummary = [

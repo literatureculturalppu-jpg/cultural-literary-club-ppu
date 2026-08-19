@@ -81,7 +81,7 @@ export default function ActivityDetail() {
   const contentData = parseContent(activity.content);
   const hasLinks = contentData.links && contentData.links.length > 0;
   const hasPdf = !!contentData.pdf;
-  const canManageRegistrations = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
+  const canManageRegistrations = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
   const registrationClosed = status === "completed";
 
   const handleRegistration = () => {

@@ -7,14 +7,20 @@ import { ArrowRight, Bell, Link as LinkIcon, Loader2, Paperclip, Plus, Send, Shi
 import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import { isAdminTierRole } from "@shared/clubRoles";
 
 type RecipientMode = "all" | "roles" | "specific";
 type AttachedFile = { name: string; url: string; key?: string };
 
 const roles = [
   { value: "user", label: "عضو" },
-  { value: "supervisor", label: "مشرف" },
+  { value: "supervisor", label: "مشرف السوشيال ميديا" },
   { value: "committee_head", label: "مشرف فريق" },
+  { value: "secretary", label: "أمين السر" },
+  { value: "treasurer", label: "أمين الصندوق" },
+  { value: "public_relations_officer", label: "مسؤول العلاقات العامة" },
+  { value: "vice_president", label: "نائب رئيس النادي" },
+  { value: "club_president", label: "رئيس النادي" },
   { value: "general_agent", label: "الوكيل العام" },
   { value: "admin", label: "المسؤول" },
   { value: "tech_admin", label: "المدير التقني" },
@@ -24,7 +30,7 @@ const inputClass = "w-full px-4 py-2 bg-background border border-border rounded-
 
 export default function AdminNotificationCenter() {
   const { user, loading } = useAuth();
-  const canSend = user?.role === "admin" || user?.role === "tech_admin";
+  const canSend = isAdminTierRole(user?.role);
   const { data: recipients = [] } = trpc.notificationCenter.listRecipients.useQuery(undefined, { enabled: canSend });
   const upload = trpc.broadcastEmail.uploadFile.useMutation();
   const utils = trpc.useUtils();

@@ -310,9 +310,14 @@ const APPROVAL_STATUS_LABELS: Record<string, string> = {
 
 const ROLE_LABELS: Record<string, string> = {
   user: "عضو",
-  supervisor: "مشرف",
+  supervisor: "مشرف السوشيال ميديا",
   committee_head: "رئيس لجنة",
   admin: "إداري",
+  club_president: "رئيس النادي",
+  vice_president: "نائب رئيس النادي",
+  public_relations_officer: "مسؤول العلاقات العامة",
+  secretary: "أمين السر",
+  treasurer: "أمين الصندوق",
   general_agent: "الوكيل العام",
   tech_admin: "المدير التقني",
 };

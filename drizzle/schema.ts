@@ -1,7 +1,19 @@
 import { boolean, date, integer, pgEnum, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // Shared enums (Postgres requires named enum types, unlike MySQL's inline enum columns).
-export const userRoleEnum = pgEnum("user_role", ["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"]);
+export const userRoleEnum = pgEnum("role", [
+  "user",
+  "admin",
+  "supervisor",
+  "committee_head",
+  "general_agent",
+  "tech_admin",
+  "club_president",
+  "vice_president",
+  "public_relations_officer",
+  "secretary",
+  "treasurer",
+]);
 export const academicYearEnum = pgEnum("academic_year", ["first", "second", "third", "fourth", "postgraduate"]);
 export const activityStatusEnum = pgEnum("activity_status", ["upcoming", "ongoing", "completed"]);
 export const memberStatusEnum = pgEnum("member_status", ["active", "inactive"]);

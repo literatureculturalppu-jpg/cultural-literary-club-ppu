@@ -11,9 +11,14 @@ import { useRef } from "react";
 const roleLabels: Record<string, string> = {
   user: "عضو",
   admin: "مسؤول",
+  club_president: "رئيس النادي",
+  vice_president: "نائب رئيس النادي",
+  public_relations_officer: "مسؤول العلاقات العامة",
+  secretary: "أمين السر",
+  treasurer: "أمين الصندوق",
   general_agent: "وكيل عام",
   tech_admin: "المدير التقني",
-  supervisor: "مشرف",
+  supervisor: "مشرف السوشيال ميديا",
   committee_head: "مشرف فريق",
 };
 

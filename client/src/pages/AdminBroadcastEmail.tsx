@@ -20,14 +20,20 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { type ClubRole, isAdminTierRole } from "@shared/clubRoles";
 
 type RecipientMode = "all" | "roles" | "specific";
-type RecipientRole = "user" | "admin" | "supervisor" | "committee_head" | "general_agent" | "tech_admin";
+type RecipientRole = ClubRole;
 
 const roleOptions: { value: RecipientRole; label: string }[] = [
   { value: "user", label: "عضو" },
-  { value: "supervisor", label: "مشرف" },
+  { value: "supervisor", label: "مشرف السوشيال ميديا" },
   { value: "committee_head", label: "مشرف فريق" },
+  { value: "secretary", label: "أمين السر" },
+  { value: "treasurer", label: "أمين الصندوق" },
+  { value: "public_relations_officer", label: "مسؤول العلاقات العامة" },
+  { value: "vice_president", label: "نائب رئيس النادي" },
+  { value: "club_president", label: "رئيس النادي" },
   { value: "general_agent", label: "الوكيل العام" },
   { value: "admin", label: "المسؤول" },
   { value: "tech_admin", label: "المدير التقني" },
@@ -54,7 +60,7 @@ const ALLOWED_FILE_TYPES = [
 export default function AdminBroadcastEmail() {
   const { user } = useAuth();
 
-  const canSend = user?.role === "admin" || user?.role === "tech_admin";
+  const canSend = isAdminTierRole(user?.role);
 
   const { data: recipients = [], isLoading: loadingRecipients } = trpc.broadcastEmail.listRecipients.useQuery(
     undefined,

@@ -50,7 +50,7 @@ function formatDate(date: Date | string) {
 // ─── Article Card ─────────────────────────────────────────────────────────────
 function ArticleCard({ article, onTogglePin }: { article: any; onTogglePin: (id: number, isPinned: boolean) => void }) {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
+  const isAdmin = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
   const rich = parseRichContent(article.content);
   const tags = rich?.tags ?? [];
   const readingTime = rich?.readingTime;
@@ -155,7 +155,7 @@ function ArticleCard({ article, onTogglePin }: { article: any; onTogglePin: (id:
 export default function Articles() {
   const { data: articles, isLoading, refetch } = trpc.articles.list.useQuery();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
+  const isAdmin = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
   const [query, setQuery] = useState("");
   const togglePin = trpc.contentPins.toggle.useMutation({
     onSuccess: (_, variables) => { toast.success(variables.isPinned ? "تم تثبيت المقال" : "تم إلغاء تثبيت المقال"); refetch(); },

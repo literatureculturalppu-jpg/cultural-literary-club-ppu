@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context.js";
 import { logAction } from "../db.js";
+import { isAdminTierRole } from "../../shared/clubRoles.js";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -77,7 +78,7 @@ export const adminProcedure = protectedProcedure.use(
       throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
     }
 
-    if (ctx.user.role !== "admin" && ctx.user.role !== "general_agent" && ctx.user.role !== "tech_admin") {
+    if (!isAdminTierRole(ctx.user.role)) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
@@ -93,10 +94,10 @@ export const activityApproverProcedure = protectedProcedure.use(
     if (!ctx.user) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
     }
-    if (!["admin", "general_agent", "tech_admin", "supervisor"].includes(ctx.user.role)) {
+    if (!isAdminTierRole(ctx.user.role) && ctx.user.role !== "supervisor") {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
-    return next({ ctx });
+    return next({ ctx: { ...ctx, user: ctx.user } });
   }),
 );
 
@@ -108,7 +109,7 @@ export const broadcastProcedure = protectedProcedure.use(
     if (!ctx.user) {
       throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
     }
-    if (ctx.user.role !== "admin" && ctx.user.role !== "tech_admin") {
+    if (!isAdminTierRole(ctx.user.role)) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
     return next({ ctx });

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import type { Express, Request, Response } from "express";
 
 import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const.js";
+import { isAdminTierRole } from "../../shared/clubRoles.js";
 import * as db from "../db.js";
 import { getSessionCookieOptions } from "../_core/cookies.js";
 import { sdk } from "../_core/sdk.js";
@@ -82,7 +83,7 @@ async function requireMobile(req: Request, res: Response) {
   return user;
 }
 
-function isAllowedSender(role: string) { return role === "admin" || role === "tech_admin"; }
+function isAllowedSender(role: string) { return isAdminTierRole(role); }
 
 export function registerMobileRoutes(app: Express) {
   app.use(`${BASE}/auth`, (_req, res, next) => {

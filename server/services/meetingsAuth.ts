@@ -11,12 +11,13 @@
 import { eq, asc } from "drizzle-orm";
 import { getDb } from "../db.js";
 import { users, meetingOverridePermissions } from "../../drizzle/schema.js";
+import { type ClubRole, isAdminTierRole } from "../../shared/clubRoles.js";
 
-export type MeetingRole = "user" | "admin" | "supervisor" | "committee_head" | "general_agent" | "tech_admin";
+export type MeetingRole = ClubRole;
 
 /** Anyone who can moderate a meeting (admit/kick/ban, toggle blocks, lock, mute-all). */
 export function isMeetingModerator(role: MeetingRole): boolean {
-  return role === "admin" || role === "general_agent" || role === "tech_admin";
+  return isAdminTierRole(role);
 }
 
 /**

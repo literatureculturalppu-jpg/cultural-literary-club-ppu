@@ -8,10 +8,9 @@ import { Users, Trash2, Edit2, Mail, Phone, GraduationCap, Hash, X, Save, Messag
 import { toast } from "sonner";
 import { useState } from "react";
 import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
+import { isAdminTierRole, ROLE_LABELS } from "@shared/clubRoles";
 
-const roleLabels: Record<string, string> = {
-  user: "عضو", admin: "مسؤول", general_agent: "وكيل عام", tech_admin: "المدير التقني", supervisor: "مشرف", committee_head: "مشرف فريق"
-};
+const roleLabels: Record<string, string> = ROLE_LABELS;
 const yearLabels: Record<string, string> = {
   first: "الأولى", second: "الثانية", third: "الثالثة", fourth: "الرابعة", postgraduate: "دراسات عليا"
 };
@@ -31,17 +30,21 @@ function EditModal({ member, viewerRole, viewerId, onClose, onSave }: { member: 
   const [referenceNumber, setReferenceNumber] = useState(member.referenceNumber || "");
   const isViewerTechAdmin = viewerRole === "tech_admin";
   const isViewerAgent = viewerRole === "general_agent" || isViewerTechAdmin;
+  const isViewerLeadership = viewerRole === "club_president" || viewerRole === "vice_president";
   // Only a tech admin may assign the "tech_admin" role (the highest tier),
   // and only a general agent or tech admin may assign "general_agent". A
   // general agent may not remove its own agent status, and a tech admin
   // may not remove its own tech-admin status either.
   const availableRoles = Object.entries(roleLabels).filter(([value]) => {
     if (value === "tech_admin") return isViewerTechAdmin;
+    if (value === "club_president" || value === "vice_president") return isViewerTechAdmin;
     if (value === "general_agent") return isViewerAgent;
+    if (value === "public_relations_officer") return isViewerTechAdmin || isViewerAgent || isViewerLeadership || viewerRole === "public_relations_officer";
     return true;
   });
   const lockRoleField =
     (member.role === "tech_admin" && (!isViewerTechAdmin || member.id === viewerId)) ||
+    ((member.role === "club_president" || member.role === "vice_president") && !isViewerTechAdmin) ||
     (member.role === "general_agent" && isViewerAgent && !isViewerTechAdmin && member.id === viewerId);
   const update = trpc.adminUsers.update.useMutation({
     onSuccess: () => { toast.success("تم تحديث بيانات العضو"); onSave(); onClose(); },
@@ -122,7 +125,7 @@ function EditModal({ member, viewerRole, viewerId, onClose, onSave }: { member: 
 
 export default function AdminMembers() {
   const { user } = useAuth();
-  const isAdminTier = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin";
+  const isAdminTier = isAdminTierRole(user?.role);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [refSort, setRefSort] = useState<"none" | "asc" | "desc">("none");
@@ -174,14 +177,14 @@ export default function AdminMembers() {
 
   // Stats
   const total = members.length;
-  const admins = members.filter((m: any) => m.role === "admin" || m.role === "general_agent" || m.role === "tech_admin" || m.role === "supervisor").length;
+  const admins = members.filter((m: any) => isAdminTierRole(m.role) || m.role === "supervisor").length;
   const completed = members.filter((m: any) => m.onboardingCompleted).length;
   const byYear: Record<string, number> = {};
   members.forEach((m: any) => { if (m.academicYear) byYear[m.academicYear] = (byYear[m.academicYear] || 0) + 1; });
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      {editingMember && <EditModal member={editingMember} viewerRole={user?.role || "user"} viewerId={user?.id} onClose={() => setEditingMember(null)} onSave={refetch} />}
+      {editingMember && <EditModal member={editingMember} viewerRole={user?.role || "user"} viewerId={user?.id ?? 0} onClose={() => setEditingMember(null)} onSave={refetch} />}
 
       <section className="bg-gradient-to-b from-accent/10 to-background py-12 md:py-16">
         <div className="container">
@@ -262,7 +265,7 @@ export default function AdminMembers() {
                       <td className="px-3 py-3 text-muted-foreground" dir="ltr">{m.phoneNumber || "—"}</td>
                       <td className="px-3 py-3 text-muted-foreground" dir="ltr">{m.whatsapp || "—"}</td>
                       <td className="px-3 py-3">
-                        <Badge className={m.role === "tech_admin" ? "bg-rose-100 text-rose-700" : m.role === "general_agent" ? "bg-amber-100 text-amber-700" : m.role === "admin" ? "bg-purple-100 text-purple-700" : m.role === "supervisor" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}>
+                        <Badge className={m.role === "tech_admin" ? "bg-rose-100 text-rose-700" : m.role === "club_president" ? "bg-amber-100 text-amber-800" : m.role === "vice_president" ? "bg-yellow-100 text-yellow-800" : m.role === "general_agent" ? "bg-amber-100 text-amber-700" : m.role === "admin" ? "bg-purple-100 text-purple-700" : m.role === "supervisor" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}>
                           {roleLabels[m.role] || m.role}
                         </Badge>
                       </td>
@@ -274,6 +277,8 @@ export default function AdminMembers() {
                       <td className="px-3 py-3">
                         {m.role === "tech_admin" && user?.role !== "tech_admin" ? (
                           <span className="text-xs text-muted-foreground">لا يمكن لغير المدير التقني تعديل المدير التقني</span>
+                        ) : (m.role === "club_president" || m.role === "vice_president") && user?.role !== "tech_admin" ? (
+                          <span className="text-xs text-muted-foreground">اتخاذ الإجراءات بحق رئيس النادي أو نائبه للمدير التقني فقط</span>
                         ) : m.role === "general_agent" && user?.role !== "general_agent" && user?.role !== "tech_admin" ? (
                           <span className="text-xs text-muted-foreground">لا يمكن للمسؤول تعديل الوكيل العام</span>
                         ) : (

@@ -6,12 +6,13 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bell, Bot, UsersRound, UserCog, FileEdit, FileClock, Video } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useEffect } from "react";
+import { isAdminTierRole, ROLE_LABELS } from "@shared/clubRoles";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [location] = useLocation();
 
-  const isAdminTier = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin";
+  const isAdminTier = isAdminTierRole(user?.role);
 
   const { data: activities = [] } = trpc.activities.list.useQuery(undefined, {
     enabled: isAdminTier || user?.role === "supervisor",
@@ -36,7 +37,7 @@ export default function AdminDashboard() {
     0
   );
 
-  if (!user || (user.role !== "admin" && user.role !== "general_agent" && user.role !== "tech_admin" && user.role !== "supervisor" && user.role !== "committee_head")) {
+  if (!user || (!isAdminTier && user.role !== "supervisor" && user.role !== "committee_head")) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -52,14 +53,7 @@ export default function AdminDashboard() {
   }
 
   const getRoleLabel = (role: string) => {
-    const labels: Record<string, string> = {
-      admin: "المسؤول",
-      general_agent: "الوكيل العام",
-      tech_admin: "المدير التقني",
-      supervisor: "المشرف",
-      committee_head: "مشرف فريق",
-    };
-    return labels[role] || role;
+    return ROLE_LABELS[role as keyof typeof ROLE_LABELS] || role;
   };
 
   const renderAdminDashboard = () => (
@@ -68,10 +62,10 @@ export default function AdminDashboard() {
       <section className="bg-gradient-to-b from-accent/10 to-background py-12 md:py-16">
         <div className="container">
           <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-2">
-            {user?.role === "tech_admin" ? "لوحة تحكم المدير التقني" : user?.role === "general_agent" ? "لوحة تحكم الوكيل العام" : "لوحة تحكم المسؤول"}
+            {`لوحة تحكم ${getRoleLabel(user?.role || "admin")}`}
           </h1>
           <p className="text-lg text-muted-foreground">
-            أهلاً بك {user?.name || (user?.role === "tech_admin" ? "المدير التقني" : user?.role === "general_agent" ? "الوكيل العام" : "المسؤول")} - لديك جميع الصلاحيات الكاملة
+            أهلاً بك {user?.name || getRoleLabel(user?.role || "admin")} - لديك جميع الصلاحيات الكاملة
             {user?.role === "general_agent" && " بالإضافة إلى إدارة حسابات المسؤولين والوكلاء"}
             {user?.role === "tech_admin" && " بالإضافة إلى إدارة حسابات المسؤولين والوكلاء، وترقية الأعضاء إلى مديرين تقنيين، والاطلاع على سجلات العمل"}
           </p>
@@ -248,7 +242,7 @@ export default function AdminDashboard() {
                   نظام الاجتماعات الإلكتروني
                 </Button>
               </Link>
-              {(user?.role === "admin" || user?.role === "tech_admin") && (
+              {isAdminTier && (
                 <>
                   <Link href="/admin/notifications">
                     <Button variant="outline" className="w-full flex items-center justify-center gap-2">

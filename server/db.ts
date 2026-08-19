@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import crypto from "crypto";
 import { Pool } from "pg";
 import { InsertUser, users, referenceNumberCounters } from "../drizzle/schema.js";
+import { getRoleTransitionDenial, isAdminTierRole } from "../shared/clubRoles.js";
 import {
   activities,
   articles,
@@ -532,7 +533,18 @@ export async function createMember(data: InsertMember) {
   return await db.insert(members).values(data);
 }
 
-export type MemberRole = "user" | "admin" | "supervisor" | "committee_head" | "general_agent" | "tech_admin";
+export type MemberRole =
+  | "user"
+  | "admin"
+  | "supervisor"
+  | "committee_head"
+  | "general_agent"
+  | "tech_admin"
+  | "club_president"
+  | "vice_president"
+  | "public_relations_officer"
+  | "secretary"
+  | "treasurer";
 
 /**
  * "الوكيل العام" (general agent) invariants: there must always be at least
@@ -584,12 +596,17 @@ function assertGeneralAgentBounds(
   }
 }
 
-export async function updateMemberRole(id: number, role: MemberRole) {
+export async function updateMemberRole(id: number, role: MemberRole, actorId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   const existing = await db.select().from(members).where(eq(members.id, id)).limit(1);
   const currentRole = existing[0]?.role;
+  const actor = actorId
+    ? (await db.select({ role: users.role }).from(users).where(eq(users.id, actorId)).limit(1))[0]
+    : undefined;
+  const hierarchyDenial = getRoleTransitionDenial(actor?.role, currentRole, role);
+  if (hierarchyDenial) throw new Error(hierarchyDenial);
   const currentCount = await countGeneralAgentMembers();
   assertGeneralAgentBounds(currentRole, role, currentCount);
 
@@ -960,7 +977,7 @@ export async function updateUserReferenceNumber(
 
 export async function updateUserRole(
   id: number,
-  role: "user" | "admin" | "supervisor" | "committee_head" | "general_agent" | "tech_admin",
+  role: MemberRole,
   actorId?: number
 ) {
   const db = await getDb();
@@ -971,6 +988,11 @@ export async function updateUserRole(
   // caller — routers, scripts, future UIs — honors the invariant.
   const existing = await db.select().from(users).where(eq(users.id, id)).limit(1);
   const target = existing[0];
+  const actor = actorId
+    ? (await db.select({ role: users.role }).from(users).where(eq(users.id, actorId)).limit(1))[0]
+    : undefined;
+  const hierarchyDenial = getRoleTransitionDenial(actor?.role, target?.role, role);
+  if (hierarchyDenial) throw new Error(hierarchyDenial);
   if (target) {
     const isProtected =
       target.openId === ENV.ownerOpenId || isProtectedAdminEmail(target.email ?? null);
@@ -1171,9 +1193,14 @@ export async function getTeamsForUser(userId: number) {
 
 const MEMBERSHIP_ROLE_LABELS: Record<string, string> = {
   admin: "مسؤول",
+  club_president: "رئيس النادي",
+  vice_president: "نائب رئيس النادي",
+  public_relations_officer: "مسؤول العلاقات العامة",
+  secretary: "أمين السر",
+  treasurer: "أمين الصندوق",
   general_agent: "وكيل عام",
   tech_admin: "المدير التقني",
-  supervisor: "مشرف",
+  supervisor: "مشرف السوشيال ميديا",
   committee_head: "مشرف فريق",
   user: "عضو النادي",
 };
@@ -1817,14 +1844,14 @@ export async function getTeamRosterFull(teamId: number) {
 
   return rows.map((u) => ({
     ...u,
-    isAdmin: u.role === "admin" || u.role === "general_agent" || u.role === "tech_admin",
+    isAdmin: isAdminTierRole(u.role),
     membershipId: memberRows.find((m) => m.userId === u.id)?.id ?? null,
   }));
 }
 
 /** Is this user a member of the team — real membership row OR an admin (implicit membership). */
 export async function isTeamMemberOrAdmin(teamId: number, userId: number, role?: string) {
-  if (role === "admin" || role === "general_agent" || role === "tech_admin") return true;
+  if (isAdminTierRole(role)) return true;
   const db = await getDb();
   if (!db) return false;
   const result = await db
@@ -2167,7 +2194,7 @@ const BASIR_MEMBER_DAILY_LIMIT = 30;
 const BASIR_ADMIN_DAILY_LIMIT = 60; // "حصتان" — double the base member quota
 
 export function getBasirDailyLimit(role?: string) {
-  return role === "admin" || role === "general_agent" || role === "tech_admin" ? BASIR_ADMIN_DAILY_LIMIT : BASIR_MEMBER_DAILY_LIMIT;
+  return isAdminTierRole(role) ? BASIR_ADMIN_DAILY_LIMIT : BASIR_MEMBER_DAILY_LIMIT;
 }
 
 function todayDateString() {
@@ -2380,7 +2407,7 @@ export async function updateUserProfile(id: number, data: {
   phoneNumber?: string;
   whatsapp?: string;
   culturalExperience?: string;
-  role?: "user" | "admin" | "supervisor" | "committee_head" | "general_agent" | "tech_admin";
+  role?: MemberRole;
 }, actorId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

@@ -1,8 +1,9 @@
  import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { activityApproverProcedure, adminProcedure, broadcastProcedure, publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
+import { activityApproverProcedure, publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
 import { TRPCError } from "@trpc/server";
+import { CLUB_ROLES, getRoleTransitionDenial, isAdminTierRole, ROLE_LABELS } from "../shared/clubRoles.js";
 
 import { z } from "zod";
 import {
@@ -247,35 +248,30 @@ export function sniffImageMagicBytes(buffer: Buffer, mimeType: string): boolean 
   }
 }
 
-// Admin-only procedure. "الوكيل العام" (general agent) and "المدير التقني"
-// (tech admin) both have all admin permissions as well, so they are always
-// allowed anywhere `adminProcedure` is required.
+// Admin-only procedure. The leadership roles inherit the complete admin surface.
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin" && ctx.user.role !== "general_agent" && ctx.user.role !== "tech_admin") {
+  if (!ctx.user || !isAdminTierRole(ctx.user.role)) {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
-  return next({ ctx });
+  return next({ ctx: { ...ctx, user: ctx.user } });
+});
+
+// Broadcast procedure: every role that inherits admin powers may send club-wide messages.
+const broadcastProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!ctx.user || !isAdminTierRole(ctx.user.role)) {
+    throw new TRPCError({ code: "FORBIDDEN" });
+  }
+  return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
 // Technical-manager-only procedure — role must be exactly "tech_admin".
 // Backs the "سجلات العمل" (work logs) dashboard and the ability to promote
 // another member to "tech_admin".
 const techAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "tech_admin") {
+  if (!ctx.user || ctx.user.role !== "tech_admin") {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
-  return next({ ctx });
-});
-
-// Broadcast-email procedure — restricted to exactly "admin" or "tech_admin".
-// Unlike `adminProcedure`, this deliberately EXCLUDES "general_agent" (and
-// every other role): per an explicit product requirement, only "المسؤول"
-// and "المدير التقني" may view or send the mass-email ("بريد جماعي") feature.
-const broadcastProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin" && ctx.user.role !== "tech_admin") {
-    throw new TRPCError({ code: "FORBIDDEN" });
-  }
-  return next({ ctx });
+  return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
 // Meeting-moderator procedure — admin/general_agent/tech_admin only.
@@ -284,10 +280,10 @@ const broadcastProcedure = protectedProcedure.use(({ ctx, next }) => {
 // (see meetingsAuth.ts) governs whether a moderator may break a meeting's
 // own restrictions once inside it — that is checked ad hoc, not here.
 const meetingModeratorProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (!isMeetingModerator(ctx.user.role)) {
+  if (!ctx.user || !isMeetingModerator(ctx.user.role)) {
     throw new TRPCError({ code: "FORBIDDEN" });
   }
-  return next({ ctx });
+  return next({ ctx: { ...ctx, user: ctx.user } });
 });
 
 /**
@@ -345,23 +341,10 @@ async function assertCanChangeUserRole(
   targetCurrentRole: string | undefined,
   newRole: string | undefined
 ) {
-  const actorIsTechAdmin = actorRole === "tech_admin";
-  if (!actorIsTechAdmin) {
-    if (targetCurrentRole === "tech_admin") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "لا يمكن تعديل بيانات المدير التقني أو صلاحياته",
-      });
-    }
-    if (newRole === "tech_admin") {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "فقط المدير التقني يمكنه ترقية شخص إلى مدير تقني",
-      });
-    }
-  }
+  const hierarchyDenial = getRoleTransitionDenial(actorRole, targetCurrentRole, newRole);
+  if (hierarchyDenial) throw new TRPCError({ code: "FORBIDDEN", message: hierarchyDenial });
 
-  const actorIsAgent = actorRole === "general_agent" || actorIsTechAdmin;
+  const actorIsAgent = actorRole === "general_agent" || actorRole === "tech_admin";
   if (!actorIsAgent) {
     if (targetCurrentRole === "general_agent") {
       throw new TRPCError({
@@ -768,13 +751,13 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.number(),
-          role: z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"]),
+          role: z.enum(CLUB_ROLES),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const target = await getMembers().then((all) => all.find((m) => m.id === input.id));
         await assertCanChangeUserRole(ctx.user.role, target?.role, input.role);
-        return updateMemberRole(input.id, input.role);
+        return updateMemberRole(input.id, input.role, ctx.user.id);
       }),
     delete: adminProcedure
       .input(z.number())
@@ -1449,7 +1432,7 @@ export const appRouter = router({
           message: z.string().min(1, "يرجى كتابة نص الرسالة").max(20000),
           recipientMode: z.enum(["all", "roles", "specific"]),
           roles: z
-            .array(z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"]))
+            .array(z.enum(CLUB_ROLES))
             .optional(),
           userIds: z.array(z.number()).optional(),
           // Optional extras — never required to send a message.
@@ -1558,7 +1541,7 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.number(),
-          role: z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"]),
+          role: z.enum(CLUB_ROLES),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -1797,7 +1780,7 @@ export const appRouter = router({
     // admins are implicit members of every team). Includes light metadata
     // so the page can render membership state without extra round-trips.
     listForCurrentUser: protectedProcedure.query(async ({ ctx }) => {
-      const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+      const isAdminTier = isAdminTierRole(ctx.user.role);
       const allTeams = await getTeams();
       const myPendingJoinRequests = await getTeamJoinRequestsByUser(ctx.user.id, "pending");
       const pendingTeamIds = new Set(myPendingJoinRequests.map((r) => r.teamId));
@@ -1822,7 +1805,7 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         const team = await getTeamById(input);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const isMember = await isTeamMemberOrAdmin(input, ctx.user.id, ctx.user.role);
         if (!team.isVisible && !isMember && !isAdminTier) {
           throw new TRPCError({ code: "FORBIDDEN" });
@@ -1847,7 +1830,7 @@ export const appRouter = router({
     searchAddableUsers: protectedProcedure
       .input(z.object({ teamId: z.number(), query: z.string().optional() }))
       .query(async ({ input, ctx }) => {
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         if (!isAdminTier && team.headId !== ctx.user.id) {
@@ -1878,7 +1861,7 @@ export const appRouter = router({
         ) {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         let headId = ctx.user.id;
         if (isAdminTier && input.headReferenceNumber) {
           const targetUser = await getUserByReferenceNumber(input.headReferenceNumber);
@@ -2003,7 +1986,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         // IDOR fix: a committee_head could previously add members to ANY
@@ -2049,7 +2032,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         // IDOR fix: a committee_head could previously remove ANY team
         // member row by id, even from a team they don't lead. Since
         // removeMember only takes the membership row id, we must resolve
@@ -2091,7 +2074,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         if (!isAdminTier && team.headId !== ctx.user.id) {
@@ -2129,7 +2112,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         if (!isAdminTier && team.headId !== ctx.user.id) {
@@ -2177,7 +2160,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         if (!isAdminTier && team.headId !== ctx.user.id) {
@@ -2198,7 +2181,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         if (!isAdminTier && team.headId !== ctx.user.id) {
@@ -2213,7 +2196,7 @@ export const appRouter = router({
         if (ctx.user?.role !== "committee_head" && ctx.user?.role !== "admin" && ctx.user?.role !== "general_agent" && ctx.user?.role !== "tech_admin") {
           throw new TRPCError({ code: "FORBIDDEN" });
         }
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
         if (!isAdminTier && team.headId !== ctx.user.id) {
@@ -2375,7 +2358,7 @@ export const appRouter = router({
     getByTeam: protectedProcedure
       .input(z.object({ teamId: z.number(), status: z.string().optional() }))
       .query(async ({ input, ctx }) => {
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         if (!isAdminTier) {
           const team = await getTeamById(input.teamId);
           if (!team || team.headId !== ctx.user.id) {
@@ -2463,7 +2446,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND" });
         }
 
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         if (!isAdminTier) {
           const team = await getTeamById(request.teamId);
           if (!team || team.headId !== ctx.user.id || !team.headFreedom) {
@@ -2506,7 +2489,7 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND" });
         }
 
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         if (!isAdminTier) {
           const team = await getTeamById(request.teamId);
           if (!team || team.headId !== ctx.user.id || !team.headFreedom) {
@@ -2547,7 +2530,7 @@ export const appRouter = router({
     getByTeam: protectedProcedure
       .input(z.object({ teamId: z.number(), status: z.string().optional() }))
       .query(async ({ input, ctx }) => {
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         if (!isAdminTier) {
           const team = await getTeamById(input.teamId);
           if (!team || team.headId !== ctx.user.id) {
@@ -2604,7 +2587,7 @@ export const appRouter = router({
           input.afterId != null
             ? getTeamMessagesSince(input.teamId, input.afterId)
             : getAllTeamMessages(input.teamId);
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const canPostWhenClosed = isAdminTier || team.headId === ctx.user.id;
         return { messages, isChatOpen: team.isChatOpen, canPostWhenClosed };
       }),
@@ -2615,7 +2598,7 @@ export const appRouter = router({
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const isHeadOrAdmin = isAdminTier || team.headId === ctx.user.id;
         // Once a team is closed, only its supervisor and admins/general
         // agents may still post — everyone else is read-only.
@@ -2673,7 +2656,7 @@ export const appRouter = router({
         if (!isMember) throw new TRPCError({ code: "FORBIDDEN" });
         const team = await getTeamById(input.teamId);
         if (!team) throw new TRPCError({ code: "NOT_FOUND" });
-        const isAdminTier = ctx.user.role === "admin" || ctx.user.role === "general_agent" || ctx.user.role === "tech_admin";
+        const isAdminTier = isAdminTierRole(ctx.user.role);
         const isModerator = isAdminTier || team.headId === ctx.user.id;
 
         const result = deleteTeamMessage(input.teamId, input.messageId, ctx.user.id, isModerator);
@@ -2744,7 +2727,7 @@ export const appRouter = router({
         title: z.string().trim().min(1, "يرجى كتابة عنوان الإشعار").max(255),
         body: z.string().trim().min(1, "يرجى كتابة نص الإشعار").max(5000),
         recipientMode: z.enum(["all", "roles", "specific"]),
-        roles: z.array(z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"])).max(6).optional(),
+        roles: z.array(z.enum(CLUB_ROLES)).max(CLUB_ROLES.length).optional(),
         userIds: z.array(z.number().int().positive()).max(500).optional(),
         links: z.array(z.string().url().max(1000)).max(10).optional(),
         files: z.array(z.object({
@@ -3190,12 +3173,10 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        // الإرسال العام أوسع من مجرد قبول طلب؛ لذا يُقصر على المسؤول
-        // والمدير التقني، ولا يمنح المشرف أو الوكيل العام صلاحية بث الرسائل.
-        if (ctx.user.role !== "admin" && ctx.user.role !== "tech_admin") {
+        if (!isAdminTierRole(ctx.user.role)) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "إرسال الرسائل العامة لمسجلي النشاط مقصور على المسؤول والمدير التقني.",
+            message: "إرسال الرسائل العامة لمسجلي النشاط مقصور على المناصب الإدارية المخولة.",
           });
         }
 
@@ -3256,6 +3237,7 @@ export const appRouter = router({
           });
         }
 
+        const senderRoleLabel = ROLE_LABELS[ctx.user.role as keyof typeof ROLE_LABELS] || "إدارة النادي";
         let emailSent = 0;
         let emailSkipped = 0;
         if (canSendEmail) {
@@ -3265,12 +3247,11 @@ export const appRouter = router({
             .split(/\n{2,}/)
             .map((paragraph) => `<p style="margin:0 0 12px;">${escapeHtml(paragraph).replace(/\n/g, "<br/>")}</p>`)
             .join("");
-          const senderRoleLabel = ctx.user.role === "tech_admin" ? "المدير التقني" : "المسؤول";
           const result = await sendPersonalizedBulkEmail(
             Array.from(emailAudience.values()),
             input.title,
             (recipient) => broadcastEmailTemplate({
-              recipientName: recipient.name,
+              recipientName: recipient.name || "مسجل في النشاط",
               subject: input.title,
               bodyHtml,
               senderName: ctx.user.name || senderRoleLabel,
@@ -3287,7 +3268,7 @@ export const appRouter = router({
           scope: "elevated",
           actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
           action: "activity_registrations.broadcast",
-          description: `قام ${ctx.user.name || (ctx.user.role === "tech_admin" ? "المدير التقني" : "المسؤول")} بإرسال رسالة عامة لمسجلي نشاط "${activity.title}"`,
+          description: `قام ${ctx.user.name || senderRoleLabel} بإرسال رسالة عامة لمسجلي نشاط "${activity.title}"`,
           entityType: "activity",
           entityId: activity.id,
           metadata: {
@@ -3425,6 +3406,10 @@ export const appRouter = router({
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
         const target = await getUserById(input);
+        const hierarchyDenial = getRoleTransitionDenial(ctx.user.role, target?.role, target?.role);
+        if (hierarchyDenial) {
+          throw new TRPCError({ code: "FORBIDDEN", message: hierarchyDenial });
+        }
         // The owner account / anyone in PROTECTED_ADMIN_EMAILS can never be
         // deleted by anyone, regardless of role — mirrors the guard already
         // enforced for role changes (assertCanChangeUserRole / updateUserRole),
@@ -3496,7 +3481,7 @@ export const appRouter = router({
         phoneNumber: z.string().optional(),
         whatsapp: z.string().optional(),
         culturalExperience: z.string().optional(),
-        role: z.enum(["user", "admin", "supervisor", "committee_head", "general_agent", "tech_admin"]).optional(),
+        role: z.enum(CLUB_ROLES).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const { id, ...data } = input;
