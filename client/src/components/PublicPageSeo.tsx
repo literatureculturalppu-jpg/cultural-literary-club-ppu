@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 
 const SITE_ORIGIN = "https://cultural-literary-club-ppu.vercel.app";
+const CLUB_SHARE_IMAGE = `${SITE_ORIGIN}/club-icon-512.png`;
 
 type PublicPageMeta = {
   title: string;
@@ -113,8 +114,12 @@ export default function PublicPageSeo() {
     setMeta("property", "og:title", meta.title);
     setMeta("property", "og:description", meta.description);
     setMeta("property", "og:url", canonicalUrl);
+    setMeta("property", "og:image", CLUB_SHARE_IMAGE);
+    setMeta("property", "og:image:alt", "شعار النادي الثقافي الأدبي - جامعة بوليتكنك فلسطين");
+    setMeta("name", "twitter:card", "summary_large_image");
     setMeta("name", "twitter:title", meta.title);
     setMeta("name", "twitter:description", meta.description);
+    setMeta("name", "twitter:image", CLUB_SHARE_IMAGE);
 
     let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) {

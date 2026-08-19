@@ -61,8 +61,12 @@ export default function Navigation() {
               </Link>
             ) : (
               <Link href="/">
-                <div className="w-10 h-10 bg-accent rounded-lg flex items-center justify-center cursor-pointer">
-                  <span className="text-accent-foreground font-bold text-lg">ب</span>
+                <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center cursor-pointer overflow-hidden p-1">
+                  <img
+                    src="/club-icon-192.png"
+                    alt="شعار النادي الثقافي الأدبي"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
               </Link>
             )}
