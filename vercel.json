@@ -7,16 +7,22 @@
   "regions": ["hnd1"],
   "headers": [
     {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
       "source": "/api/mobile/v1/(.*)",
       "headers": [
-        { "key": "Vercel-CDN-Cache-Control", "value": "public, s-maxage=60, stale-while-revalidate=300" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=86400" },
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
     },
     {
-      "source": "/api/trpc/(activities.list|activities.getById|articles.list|articles.getById|articles.getBySlug|achievements.list|achievements.getById|books.list|books.getById|externalLinks.list|externalLinks.getByType|teamMembers.list)",
+      "source": "/api/trpc/(activities.list|activities.listPage|activities.getById|articles.list|articles.listPage|articles.getById|articles.getBySlug|achievements.list|achievements.listPage|achievements.getById|books.list|books.listPage|books.getById|externalLinks.list|externalLinks.getByType|teamMembers.list)",
       "headers": [
-        { "key": "Vercel-CDN-Cache-Control", "value": "public, s-maxage=60, stale-while-revalidate=300" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=86400" },
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
     }
@@ -40,4 +46,3 @@
     { "path": "/api/cron/worklogs-cleanup", "schedule": "0 5 * * *" }
   ]
 }
-

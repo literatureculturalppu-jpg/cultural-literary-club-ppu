@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
+import { persistPublicContentCache, PUBLIC_QUERY_ROOTS, registerPublicServiceWorker, restorePublicContentCache } from "./lib/publicContentCache";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -21,6 +22,19 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Only anonymous editorial data is persisted. Account, session, notification,
+// registration, and profile queries remain memory-only by design.
+for (const root of PUBLIC_QUERY_ROOTS) {
+  queryClient.setQueryDefaults([root], {
+    staleTime: 5 * 60_000,
+    gcTime: 24 * 60 * 60_000,
+    networkMode: "offlineFirst",
+  });
+}
+restorePublicContentCache(queryClient);
+persistPublicContentCache(queryClient);
+registerPublicServiceWorker();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;

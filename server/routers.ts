@@ -358,6 +358,9 @@ export const appRouter = router({
     list: publicProcedure.query(async () => {
       return getActivities();
     }),
+    listPage: publicProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(20), cursor: z.string().optional() })).query(async ({ input }) => {
+      return getActivities(input);
+    }),
     getById: publicProcedure.input(z.number()).query(async ({ input }) => {
       return getActivityById(input);
     }),
@@ -531,6 +534,9 @@ export const appRouter = router({
   articles: router({
     list: publicProcedure.query(async () => {
       return getArticles();
+    }),
+    listPage: publicProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(20), cursor: z.string().optional() })).query(async ({ input }) => {
+      return getArticles({ ...input, publishedOnly: true });
     }),
     getById: publicProcedure.input(z.number()).query(async ({ input }) => {
       return getArticleById(input);
@@ -786,6 +792,9 @@ export const appRouter = router({
     list: publicProcedure.query(async () => {
       return getAchievements();
     }),
+    listPage: publicProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(20), cursor: z.string().optional() })).query(async ({ input }) => {
+      return getAchievements(input);
+    }),
     getById: publicProcedure.input(z.number()).query(async ({ input }) => {
       return getAchievementById(input);
     }),
@@ -947,6 +956,9 @@ export const appRouter = router({
   books: router({
     list: publicProcedure.query(async () => {
       return getBooks();
+    }),
+    listPage: publicProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(20), cursor: z.string().optional() })).query(async ({ input }) => {
+      return getBooks(input);
     }),
     getById: publicProcedure.input(z.number()).query(async ({ input }) => {
       return getBookById(input);

@@ -1,4 +1,4 @@
-import { eq, desc, and, inArray, isNotNull, ne, sql, lte, count } from "drizzle-orm";
+import { eq, desc, and, inArray, isNotNull, ne, sql, lte, count, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import crypto from "crypto";
 import { Pool } from "pg";
@@ -25,6 +25,10 @@ import {
   aiSettings,
   aiPdfFiles,
   aiUsage,
+  type Activity,
+  type Article,
+  type Achievement,
+  type Book,
   type InsertActivity,
   type InsertArticle,
   type InsertMember,
@@ -70,6 +74,35 @@ import { ENV, isProtectedAdminEmail, isTechAdminEmail } from './_core/env.js';
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
 let mobileInfrastructurePromise: Promise<void> | null = null;
+
+/** Cursor-based pagination for public editorial content. The cursor contains
+ * only sort keys, never user data, and is intentionally opaque to clients. */
+export type PublicContentPageOptions = {
+  limit?: number;
+  cursor?: string;
+  publishedOnly?: boolean;
+};
+type PublicContentCursor = { pinned: boolean; createdAt: string; id: number };
+export type PublicContentPage<T> = { items: T[]; nextCursor: string | null };
+
+function pageLimit(value?: number) {
+  return Math.max(1, Math.min(value ?? 20, 100));
+}
+
+function decodePublicContentCursor(value?: string): PublicContentCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as PublicContentCursor;
+    if (typeof parsed.pinned !== "boolean" || !Number.isInteger(parsed.id) || Number.isNaN(new Date(parsed.createdAt).getTime())) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function encodePublicContentCursor(row: { isPinned: boolean; createdAt: Date; id: number }) {
+  return Buffer.from(JSON.stringify({ pinned: row.isPinned, createdAt: row.createdAt.toISOString(), id: row.id })).toString("base64url");
+}
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 // Uses a `pg` Pool explicitly (rather than passing a bare connection string to
@@ -405,16 +438,34 @@ export async function getUserAchievements(userId: number) {
 }
 
 // Activities queries
-export async function getActivities() {
+export function getActivities(): Promise<Activity[]>;
+export function getActivities(options: PublicContentPageOptions): Promise<PublicContentPage<Activity>>;
+export async function getActivities(options?: PublicContentPageOptions): Promise<Activity[] | PublicContentPage<Activity>> {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get activities: database not available");
-    return [];
+    return options ? { items: [], nextCursor: null } : [];
   }
 
-  // Newest first (by creation date) so the most recently published
-  // activity appears at the top of the list.
-  return await db.select().from(activities).orderBy(desc(activities.createdAt));
+  if (!options) {
+    return await db.select().from(activities).orderBy(desc(activities.isPinned), desc(activities.createdAt), desc(activities.id));
+  }
+
+  const cursor = decodePublicContentCursor(options.cursor);
+  const cursorFilter = cursor ? or(
+    lt(activities.isPinned, cursor.pinned),
+    and(
+      eq(activities.isPinned, cursor.pinned),
+      or(
+        lt(activities.createdAt, new Date(cursor.createdAt)),
+        and(eq(activities.createdAt, new Date(cursor.createdAt)), lt(activities.id, cursor.id)),
+      ),
+    ),
+  ) : undefined;
+  const rows = await db.select().from(activities).where(cursorFilter).orderBy(desc(activities.isPinned), desc(activities.createdAt), desc(activities.id)).limit(pageLimit(options.limit) + 1);
+  const hasMore = rows.length > pageLimit(options.limit);
+  const items = hasMore ? rows.slice(0, -1) : rows;
+  return { items, nextCursor: hasMore ? encodePublicContentCursor(items[items.length - 1]) : null };
 }
 
 export async function getActivityById(id: number) {
@@ -455,15 +506,35 @@ export async function deleteActivity(id: number) {
 }
 
 // Articles queries
-export async function getArticles() {
+export function getArticles(): Promise<Article[]>;
+export function getArticles(options: PublicContentPageOptions): Promise<PublicContentPage<Article>>;
+export async function getArticles(options?: PublicContentPageOptions): Promise<Article[] | PublicContentPage<Article>> {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get articles: database not available");
-    return [];
+    return options ? { items: [], nextCursor: null } : [];
   }
 
-  // Pinned articles always precede the newest remaining content.
-  return await db.select().from(articles).orderBy(desc(articles.isPinned), desc(articles.createdAt));
+  if (!options) {
+    return await db.select().from(articles).orderBy(desc(articles.isPinned), desc(articles.createdAt), desc(articles.id));
+  }
+
+  const cursor = decodePublicContentCursor(options.cursor);
+  const cursorFilter = cursor ? or(
+    lt(articles.isPinned, cursor.pinned),
+    and(
+      eq(articles.isPinned, cursor.pinned),
+      or(
+        lt(articles.createdAt, new Date(cursor.createdAt)),
+        and(eq(articles.createdAt, new Date(cursor.createdAt)), lt(articles.id, cursor.id)),
+      ),
+    ),
+  ) : undefined;
+  const filters = [options.publishedOnly ? eq(articles.published, true) : undefined, cursorFilter].filter(Boolean);
+  const rows = await db.select().from(articles).where(filters.length ? and(...filters) : undefined).orderBy(desc(articles.isPinned), desc(articles.createdAt), desc(articles.id)).limit(pageLimit(options.limit) + 1);
+  const hasMore = rows.length > pageLimit(options.limit);
+  const items = hasMore ? rows.slice(0, -1) : rows;
+  return { items, nextCursor: hasMore ? encodePublicContentCursor(items[items.length - 1]) : null };
 }
 
 export async function getArticleById(id: number) {
@@ -635,15 +706,34 @@ export async function getAttachmentsByEntity(entityType: "article" | "activity",
 }
 
 // Achievements queries
-export async function getAchievements() {
+export function getAchievements(): Promise<Achievement[]>;
+export function getAchievements(options: PublicContentPageOptions): Promise<PublicContentPage<Achievement>>;
+export async function getAchievements(options?: PublicContentPageOptions): Promise<Achievement[] | PublicContentPage<Achievement>> {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get achievements: database not available");
-    return [];
+    return options ? { items: [], nextCursor: null } : [];
   }
 
-  // Pinned achievements always precede the newest remaining content.
-  return await db.select().from(achievements).orderBy(desc(achievements.isPinned), desc(achievements.createdAt));
+  if (!options) {
+    return await db.select().from(achievements).orderBy(desc(achievements.isPinned), desc(achievements.createdAt), desc(achievements.id));
+  }
+
+  const cursor = decodePublicContentCursor(options.cursor);
+  const cursorFilter = cursor ? or(
+    lt(achievements.isPinned, cursor.pinned),
+    and(
+      eq(achievements.isPinned, cursor.pinned),
+      or(
+        lt(achievements.createdAt, new Date(cursor.createdAt)),
+        and(eq(achievements.createdAt, new Date(cursor.createdAt)), lt(achievements.id, cursor.id)),
+      ),
+    ),
+  ) : undefined;
+  const rows = await db.select().from(achievements).where(cursorFilter).orderBy(desc(achievements.isPinned), desc(achievements.createdAt), desc(achievements.id)).limit(pageLimit(options.limit) + 1);
+  const hasMore = rows.length > pageLimit(options.limit);
+  const items = hasMore ? rows.slice(0, -1) : rows;
+  return { items, nextCursor: hasMore ? encodePublicContentCursor(items[items.length - 1]) : null };
 }
 
 export async function getAchievementById(id: number) {
@@ -2438,10 +2528,33 @@ export async function toggleBookPin(id: number, isPinned: boolean) {
 
 // ─── Books: "الكتب المختومة" (books the club has read) ─────────────────────
 
-export async function getBooks() {
+export function getBooks(): Promise<Book[]>;
+export function getBooks(options: PublicContentPageOptions): Promise<PublicContentPage<Book>>;
+export async function getBooks(options?: PublicContentPageOptions): Promise<Book[] | PublicContentPage<Book>> {
   const db = await getDb();
-  if (!db) { console.warn("[Database] Cannot get books: database not available"); return []; }
-  return await db.select().from(books).orderBy(desc(books.isPinned), books.order, desc(books.completedAt));
+  if (!db) {
+    console.warn("[Database] Cannot get books: database not available");
+    return options ? { items: [], nextCursor: null } : [];
+  }
+  // Keep the existing curated ordering for older callers, while the new page
+  // endpoint uses a stable indexed keyset order for incremental loading.
+  if (!options) return await db.select().from(books).orderBy(desc(books.isPinned), books.order, desc(books.completedAt));
+
+  const cursor = decodePublicContentCursor(options.cursor);
+  const cursorFilter = cursor ? or(
+    lt(books.isPinned, cursor.pinned),
+    and(
+      eq(books.isPinned, cursor.pinned),
+      or(
+        lt(books.createdAt, new Date(cursor.createdAt)),
+        and(eq(books.createdAt, new Date(cursor.createdAt)), lt(books.id, cursor.id)),
+      ),
+    ),
+  ) : undefined;
+  const rows = await db.select().from(books).where(cursorFilter).orderBy(desc(books.isPinned), desc(books.createdAt), desc(books.id)).limit(pageLimit(options.limit) + 1);
+  const hasMore = rows.length > pageLimit(options.limit);
+  const items = hasMore ? rows.slice(0, -1) : rows;
+  return { items, nextCursor: hasMore ? encodePublicContentCursor(items[items.length - 1]) : null };
 }
 
 export async function getBookById(id: number) {

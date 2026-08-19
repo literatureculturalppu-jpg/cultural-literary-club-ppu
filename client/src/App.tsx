@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { OnboardingGuard } from "./components/OnboardingGuard";
 import PublicPageSeo from "./components/PublicPageSeo";
 import FirstVisitWelcome from "./components/FirstVisitWelcome";
+import OfflineContentNotice from "./components/OfflineContentNotice";
 import Navigation from "./components/Navigation";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -76,11 +77,14 @@ function ScrollToTop() {
   return null;
 }
 
-/** Lightweight full-width spinner shown while a lazy route chunk loads. */
+/** Skeleton displayed while a lazy route chunk is loaded. */
 function RouteFallback() {
   return (
-    <div className="flex items-center justify-center py-24" dir="rtl">
-      <div className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+    <div className="mx-auto w-full max-w-6xl px-4 py-10" dir="rtl" role="status" aria-label="جاري تحميل الصفحة">
+      <div className="mb-6 h-8 w-48 rounded-md bg-muted animate-pulse" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((item) => <div key={item} className="h-48 rounded-xl bg-muted animate-pulse" />)}
+      </div>
     </div>
   );
 }
@@ -164,6 +168,7 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
+          <OfflineContentNotice />
           <ScrollToTop />
           <PublicPageSeo />
           <FirstVisitWelcome />

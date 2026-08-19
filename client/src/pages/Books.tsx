@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Link, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
 import {
   Search, BookOpen, CheckCircle2, XCircle, Star, Plus, Trash2, Vote,
   Lock, Unlock, ExternalLink, Download, Sparkles, ImagePlus, X, BookMarked,
@@ -95,7 +94,7 @@ function BookDetailModal({
           {/* الغلاف */}
           <div className="sm:w-56 shrink-0 relative aspect-[2/3] sm:aspect-auto sm:h-auto overflow-hidden bg-muted">
             {book.coverImageUrl ? (
-              <img src={book.coverImageUrl} alt={book.title} className="w-full h-full object-cover" />
+              <img src={book.coverImageUrl} alt={book.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
             ) : (
               <div className={`w-full h-full bg-gradient-to-br ${gradientFor(book.id)} flex flex-col items-center justify-center p-6 text-center`}>
                 <Sparkles className="w-6 h-6 text-white/70 mb-2" />
@@ -264,10 +263,13 @@ function BookSearchSection({ initialQuery }: { initialQuery?: string }) {
 
 // ─────────────────────────── Section 1: الكتب المختومة ─────────────────────
 function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
-  const { data: books, refetch } = trpc.books.list.useQuery();
-  const { data: articles } = trpc.articles.list.useQuery();
-  const publishedArticles = (articles ?? []).filter((a: any) => a.published);
-  const { visibleCount, sentinelRef } = useInfiniteReveal(books?.length ?? 0);
+  const { data: bookPages, refetch, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = trpc.books.listPage.useInfiniteQuery(
+    { limit: 20 },
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined },
+  );
+  const { data: articlePage } = trpc.articles.listPage.useQuery({ limit: 100 }, { enabled: isAdmin });
+  const books = bookPages?.pages.flatMap((page) => page.items) ?? [];
+  const publishedArticles = articlePage?.items ?? [];
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [selectedBook, setSelectedBook] = useState<any>(null);
@@ -522,11 +524,15 @@ function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
         </Card>
       )}
 
-      {!books || books.length === 0 ? (
+      {isLoading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6" aria-label="جاري تحميل الكتب">
+          {Array.from({ length: 5 }).map((_, index) => <div key={index} className="aspect-[2/3] rounded-xl bg-muted animate-pulse" />)}
+        </div>
+      ) : books.length === 0 ? (
         <p className="text-muted-foreground text-center py-8">لم تتم إضافة أي كتاب بعد</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
-          {books.slice(0, visibleCount).map((b: any) => (
+          {books.map((b: any) => (
             <Card
               key={b.id}
               onClick={() => setSelectedBook(b)}
@@ -592,7 +598,13 @@ function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
           ))}
         </div>
       )}
-      {books && visibleCount < books.length && <div ref={sentinelRef} className="h-1" />}
+      {hasNextPage ? (
+        <div className="mt-8 flex justify-center">
+          <Button variant="outline" onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
+            {isFetchingNextPage ? "جاري تحميل المزيد..." : "تحميل المزيد من الكتب"}
+          </Button>
+        </div>
+      ) : null}
 
       {selectedBook && (
         <BookDetailModal

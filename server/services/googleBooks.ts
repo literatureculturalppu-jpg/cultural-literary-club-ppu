@@ -53,7 +53,19 @@ export interface BookSearchResult {
   } | null;
 }
 
-function mapVolume(item: GoogleVolume, clubBook?: Awaited<ReturnType<typeof getBooks>>[number]) {
+type ClubBookForSearch = {
+  googleBooksId: string | null;
+  title: string;
+  pageCount: number | null;
+  partsCount: number | null;
+  completedAt: string | null;
+  articleId: number | null;
+  summary: string | null;
+  clubRating: number | null;
+  genre: string | null;
+};
+
+function mapVolume(item: GoogleVolume, clubBook?: ClubBookForSearch) {
   const info = item.volumeInfo ?? {};
   const access = item.accessInfo ?? {};
   const isbn =
@@ -90,7 +102,7 @@ function mapVolume(item: GoogleVolume, clubBook?: Awaited<ReturnType<typeof getB
   } satisfies BookSearchResult;
 }
 
-function buildClubIndex(clubBooks: Awaited<ReturnType<typeof getBooks>>) {
+function buildClubIndex(clubBooks: ClubBookForSearch[]) {
   return new Map(
     clubBooks.filter((b) => b.googleBooksId).map((b) => [b.googleBooksId as string, b])
   );

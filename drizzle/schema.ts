@@ -1,4 +1,4 @@
-import { boolean, date, integer, pgEnum, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, pgEnum, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 
 // Shared enums (Postgres requires named enum types, unlike MySQL's inline enum columns).
 export const userRoleEnum = pgEnum("role", [
@@ -144,7 +144,10 @@ export const activities = pgTable("activities", {
   createdBy: integer("createdBy").notNull(), // Reference to users.id
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
-});
+}, (table) => ({
+  pinnedCreatedAtIdx: index("activities_isPinned_createdAt_idx").on(table.isPinned, table.createdAt),
+  statusCreatedAtIdx: index("activities_status_createdAt_idx").on(table.status, table.createdAt),
+}));
 
 export type Activity = typeof activities.$inferSelect;
 export type InsertActivity = typeof activities.$inferInsert;
@@ -167,7 +170,10 @@ export const articles = pgTable("articles", {
   createdBy: integer("createdBy").notNull(), // Reference to users.id
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
-});
+}, (table) => ({
+  publishedCreatedAtIdx: index("articles_published_createdAt_idx").on(table.published, table.createdAt),
+  pinnedCreatedAtIdx: index("articles_isPinned_createdAt_idx").on(table.isPinned, table.createdAt),
+}));
 
 export type Article = typeof articles.$inferSelect;
 export type InsertArticle = typeof articles.$inferInsert;
@@ -256,7 +262,10 @@ export const achievements = pgTable("achievements", {
   createdBy: integer("createdBy").notNull(), // Reference to users.id
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
-});
+}, (table) => ({
+  pinnedCreatedAtIdx: index("achievements_isPinned_createdAt_idx").on(table.isPinned, table.createdAt),
+  featuredCreatedAtIdx: index("achievements_featured_createdAt_idx").on(table.featured, table.createdAt),
+}));
 
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = typeof achievements.$inferInsert;
@@ -615,7 +624,10 @@ export const books = pgTable("books", {
   isPinned: boolean("isPinned").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
-});
+}, (table) => ({
+  pinnedCreatedAtIdx: index("books_isPinned_createdAt_idx").on(table.isPinned, table.createdAt),
+  createdAtIdx: index("books_createdAt_idx").on(table.createdAt),
+}));
 
 export type Book = typeof books.$inferSelect;
 export type InsertBook = typeof books.$inferInsert;

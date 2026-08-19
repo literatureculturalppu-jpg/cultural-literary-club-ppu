@@ -62,6 +62,13 @@ async function listRows(kind: ContentKind) {
   return db.getBooks();
 }
 
+async function listPage(kind: ContentKind, limit: number, cursor?: string) {
+  if (kind === "article") return db.getArticles({ limit, cursor, publishedOnly: true });
+  if (kind === "activity") return db.getActivities({ limit, cursor });
+  if (kind === "achievement") return db.getAchievements({ limit, cursor });
+  return db.getBooks({ limit, cursor });
+}
+
 async function getRow(kind: ContentKind, id: number): Promise<any | null> {
   if (kind === "article") { const row = await db.getArticleById(id); return row?.published ? row : null; }
   if (kind === "activity") return db.getActivityById(id);
@@ -171,9 +178,18 @@ export function registerMobileRoutes(app: Express) {
   app.get(`${BASE}/:resource(articles|activities|achievements|books)`, async (req, res) => {
     const kind = ({ articles: "article", activities: "activity", achievements: "achievement", books: "book" } as const)[req.params.resource as "articles"];
     const query = queryString(req.query.query).trim().toLocaleLowerCase("ar");
-    const requestedLimit = Number(queryString(req.query.limit)) || 50;
-    const rows = (await listRows(kind)).map((row) => normalize(kind, row)).filter((item) => !query || `${item.title} ${item.summary || ""} ${item.author || ""} ${item.category || ""}`.toLocaleLowerCase("ar").includes(query));
-    res.json(envelope({ items: rows.slice(0, Math.min(requestedLimit, 100)), nextCursor: null, contentVersion: String(rows[0]?.updatedAt || "empty") }));
+    const requestedLimit = Math.max(1, Math.min(Number(queryString(req.query.limit)) || 20, 100));
+    const cursor = queryString(req.query.cursor) || undefined;
+    // Keyword search cannot use the chronological cursor safely, so it is
+    // deliberately bounded. Ordinary browsing performs a true DB-level page.
+    if (query) {
+      const rows = (await listRows(kind)).map((row) => normalize(kind, row)).filter((item) => `${item.title} ${item.summary || ""} ${item.author || ""} ${item.category || ""}`.toLocaleLowerCase("ar").includes(query));
+      res.json(envelope({ items: rows.slice(0, requestedLimit), nextCursor: null, contentVersion: String(rows[0]?.updatedAt || "empty") }));
+      return;
+    }
+    const page = await listPage(kind, requestedLimit, cursor);
+    const items = page.items.map((row) => normalize(kind, row));
+    res.json(envelope({ items, nextCursor: page.nextCursor, contentVersion: String(items[0]?.updatedAt || "empty") }));
   });
 
   app.get(`${BASE}/:resource(articles|activities|achievements|books)/:id`, async (req, res) => {
