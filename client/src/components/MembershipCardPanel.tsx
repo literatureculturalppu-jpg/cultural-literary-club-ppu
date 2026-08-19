@@ -174,18 +174,7 @@ export default function MembershipCardPanel() {
         const source = image.getAttribute("src");
         if (source) image.src = new URL(source, window.location.origin).href;
       });
-      // html2canvas has known trouble rendering `text-overflow: ellipsis`
-      // (it sometimes drops the text entirely instead of truncating it).
-      // Truncate the member name manually in JS instead, so the export
-      // never depends on that CSS feature working inside the clone.
       const nameNode = isolatedCard.querySelector<HTMLElement>('[data-export-role="member-name"]');
-      if (nameNode) {
-        const fullName = nameNode.textContent ?? "";
-        const maxChars = 22;
-        nameNode.style.whiteSpace = "normal";
-        nameNode.style.textOverflow = "clip";
-        nameNode.textContent = fullName.length > maxChars ? `${fullName.slice(0, maxChars)}…` : fullName;
-      }
       exportDocument.body.appendChild(isolatedCard);
 
       const frameWindow = isolationFrame?.contentWindow;
@@ -202,6 +191,39 @@ export default function MembershipCardPanel() {
           ]);
         } catch {
           // Ignore font-loading failures; we still proceed with the capture.
+        }
+      }
+
+      // html2canvas cannot reliably wrap right-to-left Arabic text across
+      // multiple lines — the connected-letter shaping breaks and glyphs
+      // end up overlapping/garbled. So instead of ever letting the name
+      // wrap, we measure it (with the *real* loaded font) and truncate it
+      // character-by-character until it is guaranteed to fit on one line,
+      // then keep it forced to a single line.
+      if (nameNode) {
+        const fullName = (nameNode.textContent ?? "").trim();
+        const maxWidth = nameNode.parentElement?.getBoundingClientRect().width || 590;
+        const computedStyle = frameWindow?.getComputedStyle(nameNode) ?? window.getComputedStyle(nameNode);
+        const measureCanvas = document.createElement("canvas");
+        const measureContext = measureCanvas.getContext("2d");
+        nameNode.style.whiteSpace = "nowrap";
+        nameNode.style.overflow = "hidden";
+        nameNode.style.textOverflow = "clip";
+        if (measureContext) {
+          measureContext.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+          let fitted = fullName;
+          if (measureContext.measureText(fitted).width > maxWidth) {
+            let low = 0;
+            let high = fullName.length;
+            while (low < high) {
+              const mid = Math.ceil((low + high) / 2);
+              const candidate = `${fullName.slice(0, mid)}…`;
+              if (measureContext.measureText(candidate).width <= maxWidth) low = mid;
+              else high = mid - 1;
+            }
+            fitted = low > 0 ? `${fullName.slice(0, low)}…` : "…";
+          }
+          nameNode.textContent = fitted;
         }
       }
 
