@@ -155,7 +155,14 @@ export default function MembershipCardPanel() {
       const exportDocument = isolationFrame.contentDocument;
       if (!exportDocument) throw new Error("تعذر تهيئة مساحة تصدير البطاقة.");
       exportDocument.open();
-      exportDocument.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8" /><style>html,body{margin:0;padding:0;background:#FFFFFF;color:#111111;font-family:Arial,sans-serif;direction:rtl}*{box-sizing:border-box}</style></head><body></body></html>');
+      exportDocument.write(
+        '<!doctype html><html dir="rtl"><head><meta charset="utf-8" />' +
+        '<link rel="preconnect" href="https://fonts.googleapis.com" />' +
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />' +
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" />' +
+        '<style>html,body{margin:0;padding:0;background:#FFFFFF;color:#111111;font-family:"Tajawal",Arial,sans-serif;direction:rtl}*{box-sizing:border-box}</style>' +
+        '</head><body></body></html>'
+      );
       exportDocument.close();
 
       const isolatedCard = exportCardRef.current.cloneNode(true) as HTMLDivElement;
@@ -167,10 +174,38 @@ export default function MembershipCardPanel() {
         const source = image.getAttribute("src");
         if (source) image.src = new URL(source, window.location.origin).href;
       });
+      // html2canvas has known trouble rendering `text-overflow: ellipsis`
+      // (it sometimes drops the text entirely instead of truncating it).
+      // Truncate the member name manually in JS instead, so the export
+      // never depends on that CSS feature working inside the clone.
+      const nameNode = isolatedCard.querySelector<HTMLElement>('[data-export-role="member-name"]');
+      if (nameNode) {
+        const fullName = nameNode.textContent ?? "";
+        const maxChars = 22;
+        nameNode.style.whiteSpace = "normal";
+        nameNode.style.textOverflow = "clip";
+        nameNode.textContent = fullName.length > maxChars ? `${fullName.slice(0, maxChars)}…` : fullName;
+      }
       exportDocument.body.appendChild(isolatedCard);
 
+      const frameWindow = isolationFrame?.contentWindow;
+      // Wait for the Tajawal font to actually finish loading inside the
+      // isolated iframe document before we let html2canvas measure/paint
+      // text — otherwise it falls back to a system font mid-capture and
+      // text can end up mismeasured (or not painted at all).
+      const frameFonts = (frameWindow?.document as (Document & { fonts?: FontFaceSet }) | undefined)?.fonts;
+      if (frameFonts?.ready) {
+        try {
+          await Promise.race([
+            frameFonts.ready,
+            new Promise((resolve) => window.setTimeout(resolve, 1500)),
+          ]);
+        } catch {
+          // Ignore font-loading failures; we still proceed with the capture.
+        }
+      }
+
       await new Promise<void>((resolve) => {
-        const frameWindow = isolationFrame?.contentWindow;
         if (frameWindow) frameWindow.requestAnimationFrame(() => resolve());
         else window.requestAnimationFrame(() => resolve());
       });
@@ -181,7 +216,7 @@ export default function MembershipCardPanel() {
 
       const canvas = await html2canvas(isolatedCard, {
         backgroundColor: "#FFFFFF",
-        scale: 1,
+        scale: Math.max(2, window.devicePixelRatio || 1),
         useCORS: true,
         logging: false,
       });
@@ -483,7 +518,7 @@ export default function MembershipCardPanel() {
           )}
         </div>
         <div style={{ position: "absolute", top: 408, right: 70, width: 590, textAlign: "right" }} dir="rtl">
-          <div style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 50, lineHeight: 1.22, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
+          <div data-export-role="member-name" style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 50, lineHeight: 1.22, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
           <div style={{ marginTop: 22, color: "#FDE68A", fontSize: 30 }}>{member.roleLabel}</div>
           <div style={{ marginTop: 14, color: "rgba(255,255,255,0.7)", fontFamily: "monospace", fontSize: 24, letterSpacing: "0.22em" }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
         </div>
