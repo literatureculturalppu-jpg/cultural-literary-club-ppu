@@ -97,6 +97,8 @@ function Value({ label, value }: { label: string; value?: string | null }) {
 export default function MembershipCardPanel() {
   const { data, isLoading, error } = trpc.membershipCards.mine.useQuery();
   const exportCardRef = useRef<HTMLDivElement>(null);
+  const exportCardSurfaceRef = useRef<HTMLDivElement>(null);
+  const visibleCardRef = useRef<HTMLElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
@@ -146,8 +148,13 @@ export default function MembershipCardPanel() {
     if (!exportCardRef.current || !exportFormat) return;
     setIsExporting(true);
     try {
+      const visibleCardBounds = visibleCardRef.current?.getBoundingClientRect();
+      if (visibleCardBounds && exportCardSurfaceRef.current) {
+        exportCardSurfaceRef.current.style.width = `${Math.round(visibleCardBounds.width)}px`;
+        exportCardSurfaceRef.current.style.height = `${Math.round(visibleCardBounds.height)}px`;
+      }
       const canvas = await html2canvas(exportCardRef.current, {
-        backgroundColor: "#09090b",
+        backgroundColor: "#FFFFFF",
         scale: 2,
         useCORS: true,
         logging: false,
@@ -155,7 +162,10 @@ export default function MembershipCardPanel() {
           // html2canvas 1.x cannot parse Tailwind 4's modern oklch tokens.
           // The export surface below is deliberately fully styled inline, so
           // it remains intact after removing the source application's styles.
-          clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
+          clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => {
+            if (stylesheet instanceof HTMLLinkElement && stylesheet.href.includes("fonts.googleapis.com")) return;
+            stylesheet.remove();
+          });
           clonedDocument.documentElement.style.setProperty("background", "#FFFFFF", "important");
           clonedDocument.documentElement.style.setProperty("color", "#111111", "important");
           clonedDocument.body.style.setProperty("background", "#FFFFFF", "important");
@@ -224,7 +234,7 @@ export default function MembershipCardPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6 p-4 sm:p-6">
-        <section className="overflow-hidden rounded-2xl border border-amber-400/70 bg-black text-white shadow-xl">
+        <section ref={visibleCardRef} className="overflow-hidden rounded-2xl border border-amber-400/70 bg-black text-white shadow-xl">
           <div className="relative min-h-[330px] bg-[radial-gradient(circle_at_20%_0%,rgba(217,161,59,0.26),transparent_36%),radial-gradient(circle_at_100%_100%,rgba(217,161,59,0.16),transparent_38%)] p-5 sm:p-7">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-300 via-amber-500 to-amber-300" />
             <div className="flex items-start justify-between gap-4" dir="ltr">
@@ -433,23 +443,21 @@ export default function MembershipCardPanel() {
         position: "fixed",
         left: "-10000px",
         top: 0,
-        width: 720,
-        minHeight: 330,
+        display: "inline-block",
+        boxSizing: "border-box",
+        padding: 16,
         overflow: "hidden",
-        borderRadius: 16,
-        border: "1px solid #FBBF24",
-        backgroundColor: "#000000",
-        color: "#FFFFFF",
-        fontFamily: "Arial, sans-serif",
+        backgroundColor: "#FFFFFF",
+        fontFamily: "Tajawal, Arial, sans-serif",
       }}
     >
-      <div style={{ position: "relative", minHeight: 330, padding: 28, backgroundImage: "radial-gradient(circle at 20% 0%, rgba(217,161,59,0.26), transparent 36%), radial-gradient(circle at 100% 100%, rgba(217,161,59,0.16), transparent 38%)" }}>
+      <div ref={exportCardSurfaceRef} style={{ position: "relative", boxSizing: "border-box", width: 720, height: 330, overflow: "hidden", borderRadius: 16, border: "1px solid #FBBF24", backgroundColor: "#000000", color: "#FFFFFF", padding: 28, backgroundImage: "radial-gradient(circle at 20% 0%, rgba(217,161,59,0.26), transparent 36%), radial-gradient(circle at 100% 100%, rgba(217,161,59,0.16), transparent 38%)" }}>
         <div style={{ position: "absolute", top: 0, right: 0, left: 0, height: 4, backgroundImage: "linear-gradient(to left, #FCD34D, #F59E0B, #FCD34D)" }} />
         <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }} dir="ltr">
           <img src="/club-icon-192.png" alt="" style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 12, border: "1px solid rgba(252,211,77,0.6)", backgroundColor: "#000000", objectFit: "contain", padding: 4 }} />
           <div style={{ textAlign: "right" }} dir="rtl">
             <div style={{ color: "#FDE68A", fontSize: 12 }}>جامعة بوليتكنك فلسطين</div>
-            <div style={{ marginTop: 4, color: "#FFFFFF", fontSize: 24, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
+            <div style={{ marginTop: 4, color: "#FFFFFF", fontSize: 20, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
             <div style={{ marginTop: 4, color: "rgba(255,255,255,0.75)", fontSize: 14 }}>بطاقة عضوية رقمية</div>
           </div>
         </div>
@@ -463,7 +471,7 @@ export default function MembershipCardPanel() {
             )}
           </div>
           <div style={{ minWidth: 0, textAlign: "right" }} dir="rtl">
-            <div style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 24, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
+            <div style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 20, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
             <div style={{ marginTop: 4, color: "#FDE68A", fontSize: 14 }}>{member.roleLabel}</div>
             <div style={{ marginTop: 4, color: "rgba(255,255,255,0.7)", fontFamily: "monospace", fontSize: 12, letterSpacing: "0.2em" }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
           </div>
