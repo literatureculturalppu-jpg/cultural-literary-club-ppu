@@ -6,7 +6,7 @@ import * as db from "../db.js";
 import { getSessionCookieOptions } from "../_core/cookies.js";
 import { sdk } from "../_core/sdk.js";
 import { sendMobilePushToUsers } from "../services/mobilePush.js";
-import { notifyUserEvent } from "../services/notify.js";
+import { notifyActivityRegistrationAdmins, notifyUserEvent } from "../services/notify.js";
 
 const BASE = "/api/mobile/v1";
 const SESSION_COOKIE = "club_web_session";
@@ -189,6 +189,11 @@ export function registerMobileRoutes(app: Express) {
     const existing = await db.getUserActivitySubscriptions(user.id);
     if (existing.some((entry) => entry.activityId === activityId)) { res.status(409).json({ message: "أنت مسجل في هذا النشاط مسبقاً." }); return; }
     await db.createActivitySubscription({ activityId, userId: user.id, status: "pending" });
+    void notifyActivityRegistrationAdmins({
+      activityId,
+      activityTitle: activity.title,
+      registrationKind: "member",
+    });
     void notifyUserEvent(user.id, {
       entityId: activityId,
       title: "تم استلام طلب انضمامك للنشاط",

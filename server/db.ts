@@ -1597,6 +1597,16 @@ export async function getAdminTierUsers() {
     .where(inArray(users.role, ["admin", "general_agent", "tech_admin"] as any));
 }
 
+/** جميع الأدوار القادرة على عرض وقبول طلبات تسجيل الأنشطة. */
+export async function getActivityApprovalUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({ id: users.id })
+    .from(users)
+    .where(inArray(users.role, ["admin", "general_agent", "tech_admin", "supervisor"] as any));
+}
+
 /**
  * Roster of a team for regular members: name + id only (no contact info,
  * academic details, etc). Admins merged in automatically since they're

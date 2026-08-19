@@ -172,7 +172,7 @@ import {
 } from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
 import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
-import { notifyContentCreated, notifyActivityApproval, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp, notifyUserEvent } from "./services/notify.js";
+import { notifyContentCreated, notifyActivityApproval, notifyActivityRegistrationAdmins, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp, notifyUserEvent } from "./services/notify.js";
 import { sendMobilePushForNotifications } from "./services/mobilePush.js";
 import { chatWithBasir } from "./services/basir.js";
 import { generateImageEphemeral } from "./_core/imageGeneration.js";
@@ -558,6 +558,11 @@ export const appRouter = router({
         const result = await createActivitySubscription({
           userId: ctx.user.id,
           activityId: input,
+        });
+        void notifyActivityRegistrationAdmins({
+          activityId: input,
+          activityTitle: activity.title,
+          registrationKind: "member",
         });
         recordWorkLog({
           ctx,
@@ -3069,6 +3074,11 @@ export const appRouter = router({
           throw new TRPCError({ code: "CONFLICT", message: "تم إرسال طلب تسجيل سابق لهذا النشاط بهذه البيانات." });
         }
         const result = await createGuestActivityRegistration(input);
+        void notifyActivityRegistrationAdmins({
+          activityId: input.activityId,
+          activityTitle: activity.title,
+          registrationKind: "guest",
+        });
         recordWorkLog({
           scope: "member",
           actor: null,

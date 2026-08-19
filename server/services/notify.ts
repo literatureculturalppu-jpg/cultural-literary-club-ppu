@@ -166,6 +166,33 @@ export async function notifyGuestActivityApproval(
   }
 }
 
+/**
+ * يُرسل للإدارة التي تراجع طلبات الأنشطة فقط. لا يتضمن الإشعار بيانات الاتصال
+ * الخاصة بالمتقدم، بل يوجّه المسؤول إلى صفحة القبول الخاصة بالنشاط.
+ */
+export async function notifyActivityRegistrationAdmins(params: {
+  activityId: number;
+  activityTitle: string;
+  registrationKind: "member" | "guest";
+}): Promise<void> {
+  try {
+    const approvers = await db.getActivityApprovalUsers();
+    const recipientIds = approvers.map((approver) => approver.id);
+    if (recipientIds.length === 0) return;
+
+    const kindLabel = params.registrationKind === "guest" ? "ضيف" : "عضو";
+    await notifyTeamInApp(recipientIds, {
+      entityId: params.activityId,
+      title: `طلب تسجيل ${kindLabel} جديد في نشاط: ${params.activityTitle}`,
+      body: "يوجد طلب جديد بانتظار المراجعة والقبول.",
+      url: `/admin/activities/${params.activityId}/registrations`,
+      type: "team_request",
+    });
+  } catch (error) {
+    console.error("[notify] Failed to notify admins about activity registration:", error);
+  }
+}
+
 /** Book publication gets the same notification treatment as other content. */
 export async function notifyBookCreated(bookId: number, bookTitle: string, author: string, excludeUserId: number): Promise<void> {
   try {

@@ -19,7 +19,13 @@ export default function AdminActivityRegistrations() {
   const activityId = parseInt(params.id || "0");
 
   const { data: activity } = trpc.activities.getById.useQuery(activityId);
-  const { data: registrations, isLoading, refetch } = trpc.activityRegistrations.getForActivity.useQuery(activityId);
+  const { data: registrations, isLoading, isFetching, refetch } = trpc.activityRegistrations.getForActivity.useQuery(activityId, {
+    // بيانات القبول خاصة، لذلك لا تُخزّن في كاش عام. يعيد الاستعلام الجلب
+    // بانتظام ليظهر الطلب الجديد حتى عندما تبقى صفحة الإدارة مفتوحة.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: 8_000,
+  });
 
   const approveSubscription = trpc.activityRegistrations.approveSubscription.useMutation({ onSuccess: () => { toast.success("تمت الموافقة"); refetch(); }, onError: e => toast.error(e.message) });
   const rejectSubscription = trpc.activityRegistrations.rejectSubscription.useMutation({ onSuccess: () => { toast.success("تم الرفض"); refetch(); }, onError: e => toast.error(e.message) });
@@ -43,6 +49,9 @@ export default function AdminActivityRegistrations() {
               <h1 className="text-3xl font-bold">طلبات قبول المسجلين في النشاط</h1>
               {activity && <p className="text-muted-foreground mt-1">{activity.title}</p>}
             </div>
+            <Button variant="outline" size="sm" className="mr-auto" onClick={() => void refetch()} disabled={isFetching}>
+              {isFetching ? "جاري التحديث..." : "تحديث الطلبات"}
+            </Button>
           </div>
           <div className="flex gap-4 mt-4 flex-wrap">
             <StatPill icon={<Users className="w-4 h-4 text-accent" />} label={`الإجمالي: ${memberCount + guestCount}`} />
