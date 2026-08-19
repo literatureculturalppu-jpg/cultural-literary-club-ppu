@@ -18,6 +18,8 @@ const About = lazy(() => import("./pages/About"));
 const preloadActivities = () => import("./pages/Activities");
 const preloadActivityDetail = () => import("./pages/ActivityDetail");
 const Activities = lazy(preloadActivities);
+const Calendar = lazy(() => import("./pages/Calendar"));
+const Certificate = lazy(() => import("./pages/Certificate"));
 const Articles = lazy(() => import("./pages/Articles"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -92,6 +94,7 @@ function Router() {
         <Route path={"/"} component={Home} />
         <Route path={"/about"} component={About} />
         <Route path={"/activities"} component={Activities} />
+        <Route path={"/calendar"} component={Calendar} />
         <Route path={"/articles"} component={Articles} />
         <Route path={"/achievements"} component={Achievements} />
         <Route path={"/admin"} component={AdminDashboard} />
@@ -122,6 +125,7 @@ function Router() {
         <Route path={"/admin/activities/:id/registrations"} component={AdminActivityRegistrations} />
         <Route path={"/admin/basir-settings"} component={AdminBasirSettings} />
         <Route path={"/membership/verify/:token"} component={MembershipCardVerify} />
+        <Route path={"/certificates/:token"} component={Certificate} />
 
         <Route path={"/pending-approval"} component={PendingApprovalRoute} />
         <Route path={"/onboarding"} component={OnboardingForm} />

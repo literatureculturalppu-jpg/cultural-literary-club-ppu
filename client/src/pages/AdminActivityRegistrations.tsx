@@ -4,7 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Bell, Loader2, Mail, Send, Trash2, UserCheck, UserPlus, Users } from "lucide-react";
+import { ArrowRight, Award, Bell, ExternalLink, Loader2, Mail, Send, Trash2, UserCheck, UserPlus, Users } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { isAdminTierRole } from "@shared/clubRoles";
@@ -40,6 +40,18 @@ export default function AdminActivityRegistrations() {
   const [sendPush, setSendPush] = useState(true);
   const [sendEmail, setSendEmail] = useState(true);
   const canBroadcast = isAdminTierRole(user?.role);
+  const canIssueCertificates = isAdminTierRole(user?.role);
+  const { data: certificates = [], refetch: refetchCertificates } = trpc.activityCertificates.listForActivity.useQuery(activityId, {
+    enabled: Boolean(user) && activityId > 0,
+  });
+  const issueCertificate = trpc.activityCertificates.issue.useMutation({
+    onSuccess: () => { toast.success("تم إصدار الشهادة وإرسال إشعار للعضو"); void refetchCertificates(); },
+    onError: (error) => toast.error(error.message),
+  });
+  const revokeCertificate = trpc.activityCertificates.revoke.useMutation({
+    onSuccess: () => { toast.success("تم إلغاء الشهادة"); void refetchCertificates(); },
+    onError: (error) => toast.error(error.message),
+  });
   const broadcastToRegistrants = trpc.activityRegistrations.broadcastToRegistrants.useMutation({
     onSuccess: (result) => {
       const deliverySummary = [
@@ -53,7 +65,7 @@ export default function AdminActivityRegistrations() {
     onError: (error) => toast.error(error.message),
   });
 
-  if (!user || (user.role !== "admin" && user.role !== "tech_admin" && user.role !== "supervisor")) {
+  if (!user || (!isAdminTierRole(user.role) && user.role !== "supervisor")) {
     return <div className="container py-16 text-center" dir="rtl"><p className="text-muted-foreground">غير مصرح لك</p></div>;
   }
 
@@ -158,6 +170,36 @@ export default function AdminActivityRegistrations() {
                       {broadcastToRegistrants.isPending ? "جارِ الإرسال..." : "إرسال للجميع"}
                     </Button>
                   </form>
+                </Card>
+              )}
+
+              {canIssueCertificates && (
+                <Card className="p-5 md:p-6 border-accent/30 bg-accent/[0.03]">
+                  <div className="flex items-start gap-3 mb-5">
+                    <div className="w-10 h-10 shrink-0 rounded-lg bg-accent/15 flex items-center justify-center"><Award className="w-5 h-5 text-accent" /></div>
+                    <div>
+                      <h2 className="font-bold text-lg">الشهادات الإلكترونية</h2>
+                      <p className="text-sm text-muted-foreground mt-1">تُصدر الشهادة للأعضاء الذين تمت الموافقة على تسجيلهم فقط، وتحتوي رابط تحقق مستقلًا.</p>
+                    </div>
+                  </div>
+                  {activity && new Date(activity.startDate).getTime() > Date.now() ? (
+                    <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">يمكن إصدار الشهادات بعد بدء موعد النشاط.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(registrations?.members ?? []).filter((member: any) => member.status === "approved").length === 0 ? (
+                        <p className="text-sm text-muted-foreground">لا يوجد أعضاء مقبولون لإصدار شهادات لهم بعد.</p>
+                      ) : (registrations?.members ?? []).filter((member: any) => member.status === "approved").map((member: any) => {
+                        const certificate = certificates.find((entry: any) => entry.certificate.userId === member.userId)?.certificate;
+                        return <div key={member.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-background border border-border">
+                          <span className="font-medium text-sm">{member.arabicFullName || member.name || "عضو النادي"}</span>
+                          {certificate ? <div className="flex gap-2">
+                            <Link href={`/certificates/${certificate.verificationToken}`} target="_blank"><Button size="sm" variant="outline" className="gap-1"><ExternalLink className="w-3.5 h-3.5" />عرض الشهادة</Button></Link>
+                            <Button size="sm" variant="outline" className="text-destructive" onClick={() => { if (window.confirm("هل تريد إلغاء هذه الشهادة؟")) revokeCertificate.mutate({ id: certificate.id }); }} disabled={revokeCertificate.isPending}>إلغاء</Button>
+                          </div> : <Button size="sm" variant="outline" className="border-accent/40 text-accent gap-1" onClick={() => issueCertificate.mutate({ activityId, userId: member.userId })} disabled={issueCertificate.isPending}><Award className="w-3.5 h-3.5" />إصدار الشهادة</Button>}
+                        </div>;
+                      })}
+                    </div>
+                  )}
                 </Card>
               )}
 

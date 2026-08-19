@@ -46,6 +46,8 @@ import {
   registrationSettings,
   books,
   type InsertBook,
+  userBookShelves,
+  activityCertificates,
   bookSuggestionRounds,
   type InsertBookSuggestionRound,
   bookSuggestions,
@@ -2468,6 +2470,129 @@ export async function deleteBook(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return await db.delete(books).where(eq(books.id, id));
+}
+
+// ─── Personal reading lists ────────────────────────────────────────────────
+
+export async function getUserBookShelf(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({ bookId: userBookShelves.bookId, status: userBookShelves.status, updatedAt: userBookShelves.updatedAt })
+    .from(userBookShelves)
+    .where(eq(userBookShelves.userId, userId));
+}
+
+export async function setUserBookShelfStatus(
+  userId: number,
+  bookId: number,
+  status: "want_to_read" | "reading" | "finished",
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const book = await getBookById(bookId);
+  if (!book) return null;
+  const [row] = await db
+    .insert(userBookShelves)
+    .values({ userId, bookId, status })
+    .onConflictDoUpdate({
+      target: [userBookShelves.userId, userBookShelves.bookId],
+      set: { status, updatedAt: new Date() },
+    })
+    .returning();
+  return row;
+}
+
+export async function removeUserBookShelfEntry(userId: number, bookId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(userBookShelves).where(and(eq(userBookShelves.userId, userId), eq(userBookShelves.bookId, bookId)));
+  return { success: true };
+}
+
+// ─── Activity participation certificates ───────────────────────────────────
+
+export async function getActivityCertificateByActivityAndUser(activityId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(activityCertificates)
+    .where(and(eq(activityCertificates.activityId, activityId), eq(activityCertificates.userId, userId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getActivityCertificates(activityId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({
+      certificate: activityCertificates,
+      user: {
+        id: users.id,
+        name: users.name,
+        arabicFullName: users.arabicFullName,
+        referenceNumber: users.referenceNumber,
+      },
+    })
+    .from(activityCertificates)
+    .innerJoin(users, eq(activityCertificates.userId, users.id))
+    .where(eq(activityCertificates.activityId, activityId))
+    .orderBy(desc(activityCertificates.issuedAt));
+}
+
+export async function issueActivityCertificate(input: {
+  activityId: number;
+  userId: number;
+  recipientName: string;
+  issuedBy: number;
+}) {
+  const existing = await getActivityCertificateByActivityAndUser(input.activityId, input.userId);
+  if (existing) return existing;
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [certificate] = await db
+    .insert(activityCertificates)
+    .values({
+      ...input,
+      recipientName: input.recipientName.slice(0, 255),
+      certificateNumber: `PPU-CLC-${input.activityId}-${input.userId}`,
+      verificationToken: crypto.randomBytes(32).toString("hex"),
+    })
+    .returning();
+  return certificate;
+}
+
+export async function getUserActivityCertificates(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({ certificate: activityCertificates, activity: activities })
+    .from(activityCertificates)
+    .innerJoin(activities, eq(activityCertificates.activityId, activities.id))
+    .where(eq(activityCertificates.userId, userId))
+    .orderBy(desc(activityCertificates.issuedAt));
+}
+
+export async function getCertificateByVerificationToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ certificate: activityCertificates, activity: activities })
+    .from(activityCertificates)
+    .innerJoin(activities, eq(activityCertificates.activityId, activities.id))
+    .where(eq(activityCertificates.verificationToken, token))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function revokeActivityCertificate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(activityCertificates).set({ revokedAt: new Date() }).where(eq(activityCertificates.id, id));
+  return { success: true };
 }
 
 // ─── Book suggestions ("اقتراحات الأعضاء") ──────────────────────────────────
