@@ -835,6 +835,22 @@ export async function deleteActivitySubscription(activityId: number, userId: num
     );
 }
 
+/** حذف تسجيل عضو من نشاط محدد؛ لا يحذف حساب العضو أو ملفه الشخصي. */
+export async function deleteActivitySubscriptionById(activityId: number, subscriptionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db
+    .delete(activitySubscriptions)
+    .where(
+      and(
+        eq(activitySubscriptions.id, subscriptionId),
+        eq(activitySubscriptions.activityId, activityId)
+      )
+    )
+    .returning({ id: activitySubscriptions.id, userId: activitySubscriptions.userId });
+}
+
 export async function isUserSubscribedToActivity(activityId: number, userId: number) {
   const db = await getDb();
   if (!db) {
@@ -2113,6 +2129,22 @@ export async function getGuestRegistrationsByActivity(activityId: number) {
     .from(guestActivityRegistrations)
     .where(eq(guestActivityRegistrations.activityId, activityId))
     .orderBy(desc(guestActivityRegistrations.registeredAt));
+}
+
+/** حذف تسجيل ضيف من نشاط محدد؛ لا يؤثر في أي عضوية أو حساب آخر. */
+export async function deleteGuestActivityRegistrationById(activityId: number, registrationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db
+    .delete(guestActivityRegistrations)
+    .where(
+      and(
+        eq(guestActivityRegistrations.id, registrationId),
+        eq(guestActivityRegistrations.activityId, activityId)
+      )
+    )
+    .returning({ id: guestActivityRegistrations.id, fullName: guestActivityRegistrations.fullName });
 }
 
 export async function getActivitySubscribersWithUsers(activityId: number) {

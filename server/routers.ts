@@ -40,6 +40,7 @@ import {
   getUserActivitySubscriptions,
   createActivitySubscription,
   deleteActivitySubscription,
+  deleteActivitySubscriptionById,
   isUserSubscribedToActivity,
   getUserActivities,
   getUserArticles,
@@ -114,6 +115,7 @@ import {
   getBasirUsageStats,
   createGuestActivityRegistration,
   getGuestRegistrationsByActivity,
+  deleteGuestActivityRegistrationById,
   getActivitySubscribersWithUsers,
   getRegistrationSettings,
   updateRegistrationEnabled,
@@ -3116,6 +3118,46 @@ export const appRouter = router({
             cause: error,
           });
         }
+      }),
+
+    deleteSubscription: activityApproverProcedure
+      .input(z.object({ activityId: z.number().int().positive(), subscriptionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const [deleted] = await deleteActivitySubscriptionById(input.activityId, input.subscriptionId);
+        if (!deleted) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "تسجيل العضو غير موجود في هذا النشاط." });
+        }
+        recordWorkLog({
+          ctx,
+          scope: "elevated",
+          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
+          action: "activity_subscription.delete",
+          description: `قام ${ctx.user.name || "مستخدم"} بحذف تسجيل عضو من نشاط دون حذف حسابه`,
+          entityType: "activitySubscription",
+          entityId: deleted.id,
+          metadata: { activityId: input.activityId, userId: deleted.userId },
+        });
+        return { success: true };
+      }),
+
+    deleteGuest: activityApproverProcedure
+      .input(z.object({ activityId: z.number().int().positive(), registrationId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const [deleted] = await deleteGuestActivityRegistrationById(input.activityId, input.registrationId);
+        if (!deleted) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "تسجيل الضيف غير موجود في هذا النشاط." });
+        }
+        recordWorkLog({
+          ctx,
+          scope: "elevated",
+          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
+          action: "activity_guest.delete",
+          description: `قام ${ctx.user.name || "مستخدم"} بحذف تسجيل الضيف "${deleted.fullName}" من النشاط`,
+          entityType: "guestActivityRegistration",
+          entityId: deleted.id,
+          metadata: { activityId: input.activityId },
+        });
+        return { success: true };
       }),
 
     broadcastToRegistrants: activityApproverProcedure

@@ -4,7 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Bell, Loader2, Mail, Send, UserCheck, UserPlus, Users } from "lucide-react";
+import { ArrowRight, Bell, Loader2, Mail, Send, Trash2, UserCheck, UserPlus, Users } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 
@@ -32,6 +32,8 @@ export default function AdminActivityRegistrations() {
   const rejectSubscription = trpc.activityRegistrations.rejectSubscription.useMutation({ onSuccess: () => { toast.success("تم الرفض"); refetch(); }, onError: e => toast.error(e.message) });
   const approveGuest = trpc.activityRegistrations.approveGuest.useMutation({ onSuccess: () => { toast.success("تمت الموافقة"); refetch(); }, onError: e => toast.error(e.message) });
   const rejectGuest = trpc.activityRegistrations.rejectGuest.useMutation({ onSuccess: () => { toast.success("تم الرفض"); refetch(); }, onError: e => toast.error(e.message) });
+  const deleteSubscription = trpc.activityRegistrations.deleteSubscription.useMutation({ onSuccess: () => { toast.success("تم حذف تسجيل العضو من النشاط"); refetch(); }, onError: e => toast.error(e.message) });
+  const deleteGuest = trpc.activityRegistrations.deleteGuest.useMutation({ onSuccess: () => { toast.success("تم حذف تسجيل الضيف من النشاط"); refetch(); }, onError: e => toast.error(e.message) });
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastBody, setBroadcastBody] = useState("");
   const [sendPush, setSendPush] = useState(true);
@@ -73,6 +75,10 @@ export default function AdminActivityRegistrations() {
       sendPush,
       sendEmail,
     });
+  };
+  const confirmRegistrationDeletion = (registrantName: string, onConfirm: () => void) => {
+    const accepted = window.confirm(`هل تريد حذف تسجيل ${registrantName} من هذا النشاط؟\nلن يتم حذف حسابه أو بياناته الشخصية.`);
+    if (accepted) onConfirm();
   };
 
   return (
@@ -179,13 +185,14 @@ export default function AdminActivityRegistrations() {
                             <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(m.subscribedAt).toLocaleDateString("ar-SA")}</td>
                             <td className="px-4 py-3"><StatusBadge status={m.status || "pending"} /></td>
                             <td className="px-4 py-3">
-                              {(m.status || "pending") === "pending" ? (
-                                <div className="flex gap-2 whitespace-nowrap">
+                              <div className="flex flex-wrap gap-2 whitespace-nowrap">
+                                {(m.status || "pending") === "pending" ? (
+                                  <>
                                   <Button
                                     size="sm"
                                     className="bg-green-600 hover:bg-green-700 text-white h-8 px-3"
                                     onClick={() => approveSubscription.mutate(m.id)}
-                                    disabled={approveSubscription.isPending || rejectSubscription.isPending}
+                                    disabled={approveSubscription.isPending || rejectSubscription.isPending || deleteSubscription.isPending}
                                   >
                                     {approveSubscription.isPending ? "جارِ القبول..." : "قبول"}
                                   </Button>
@@ -194,14 +201,23 @@ export default function AdminActivityRegistrations() {
                                     variant="destructive"
                                     className="h-8 px-3"
                                     onClick={() => rejectSubscription.mutate(m.id)}
-                                    disabled={approveSubscription.isPending || rejectSubscription.isPending}
+                                    disabled={approveSubscription.isPending || rejectSubscription.isPending || deleteSubscription.isPending}
                                   >
                                     {rejectSubscription.isPending ? "جارِ الرفض..." : "رفض"}
                                   </Button>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">تم اتخاذ الإجراء</span>
-                              )}
+                                  </>
+                                ) : <span className="self-center text-xs text-muted-foreground">تم اتخاذ الإجراء</span>}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-3 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                  onClick={() => confirmRegistrationDeletion(m.arabicFullName || m.name || "هذا العضو", () => deleteSubscription.mutate({ activityId, subscriptionId: m.id }))}
+                                  disabled={approveSubscription.isPending || rejectSubscription.isPending || deleteSubscription.isPending}
+                                >
+                                  {deleteSubscription.isPending ? <Loader2 className="w-3.5 h-3.5 ml-1 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 ml-1" />}
+                                  حذف التسجيل
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -239,13 +255,14 @@ export default function AdminActivityRegistrations() {
                             <td className="px-3 py-3 text-muted-foreground" dir="ltr">{g.whatsapp || "—"}</td>
                             <td className="px-3 py-3"><StatusBadge status={g.status || "pending"} /></td>
                             <td className="px-3 py-3">
-                              {(g.status || "pending") === "pending" ? (
-                                <div className="flex gap-2 whitespace-nowrap">
+                              <div className="flex flex-wrap gap-2 whitespace-nowrap">
+                                {(g.status || "pending") === "pending" ? (
+                                  <>
                                   <Button
                                     size="sm"
                                     className="bg-green-600 hover:bg-green-700 text-white h-8 px-3"
                                     onClick={() => approveGuest.mutate(g.id)}
-                                    disabled={approveGuest.isPending || rejectGuest.isPending}
+                                    disabled={approveGuest.isPending || rejectGuest.isPending || deleteGuest.isPending}
                                   >
                                     {approveGuest.isPending ? "جارِ القبول..." : "قبول"}
                                   </Button>
@@ -254,14 +271,23 @@ export default function AdminActivityRegistrations() {
                                     variant="destructive"
                                     className="h-8 px-3"
                                     onClick={() => rejectGuest.mutate(g.id)}
-                                    disabled={approveGuest.isPending || rejectGuest.isPending}
+                                    disabled={approveGuest.isPending || rejectGuest.isPending || deleteGuest.isPending}
                                   >
                                     {rejectGuest.isPending ? "جارِ الرفض..." : "رفض"}
                                   </Button>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">تم اتخاذ الإجراء</span>
-                              )}
+                                  </>
+                                ) : <span className="self-center text-xs text-muted-foreground">تم اتخاذ الإجراء</span>}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-3 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                  onClick={() => confirmRegistrationDeletion(g.fullName || "هذا الضيف", () => deleteGuest.mutate({ activityId, registrationId: g.id }))}
+                                  disabled={approveGuest.isPending || rejectGuest.isPending || deleteGuest.isPending}
+                                >
+                                  {deleteGuest.isPending ? <Loader2 className="w-3.5 h-3.5 ml-1 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 ml-1" />}
+                                  حذف التسجيل
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
