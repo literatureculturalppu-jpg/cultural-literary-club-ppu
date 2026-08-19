@@ -433,49 +433,55 @@ export default function MembershipCardPanel() {
         position: "fixed",
         left: "-10000px",
         top: 0,
-        width: 900,
-        minHeight: 520,
+        width: 720,
+        minHeight: 330,
         overflow: "hidden",
-        backgroundColor: "#0B1220",
+        borderRadius: 16,
+        border: "1px solid #FBBF24",
+        backgroundColor: "#000000",
         color: "#FFFFFF",
         fontFamily: "Arial, sans-serif",
       }}
     >
-      <div style={{ height: 10, backgroundColor: "#C98E22" }} />
-      <div style={{ padding: 42 }}>
-        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <img src="/club-icon-192.png" alt="" style={{ width: 82, height: 82, objectFit: "contain", borderRadius: 14, border: "2px solid #E8C46A", backgroundColor: "#FFFFFF", padding: 5 }} />
+      <div style={{ position: "relative", minHeight: 330, padding: 28, backgroundImage: "radial-gradient(circle at 20% 0%, rgba(217,161,59,0.26), transparent 36%), radial-gradient(circle at 100% 100%, rgba(217,161,59,0.16), transparent 38%)" }}>
+        <div style={{ position: "absolute", top: 0, right: 0, left: 0, height: 4, backgroundImage: "linear-gradient(to left, #FCD34D, #F59E0B, #FCD34D)" }} />
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }} dir="ltr">
+          <img src="/club-icon-192.png" alt="" style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 12, border: "1px solid rgba(252,211,77,0.6)", backgroundColor: "#000000", objectFit: "contain", padding: 4 }} />
           <div style={{ textAlign: "right" }} dir="rtl">
-            <div style={{ color: "#F6D88E", fontSize: 22 }}>جامعة بوليتكنك فلسطين</div>
-            <div style={{ marginTop: 8, fontSize: 34, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
-            <div style={{ marginTop: 8, color: "#CBD5E1", fontSize: 19 }}>بطاقة عضوية رقمية</div>
+            <div style={{ color: "#FDE68A", fontSize: 12 }}>جامعة بوليتكنك فلسطين</div>
+            <div style={{ marginTop: 4, color: "#FFFFFF", fontSize: 24, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
+            <div style={{ marginTop: 4, color: "rgba(255,255,255,0.75)", fontSize: 14 }}>بطاقة عضوية رقمية</div>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 58 }}>
-          <div style={{ width: 150, height: 150, overflow: "hidden", borderRadius: 75, border: "4px solid #E8C46A", backgroundColor: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {localPhotoUrl ? (
-              <img src={localPhotoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 28 }} dir="ltr">
+          <div style={{ width: 64, height: 64, flexShrink: 0, overflow: "hidden", borderRadius: "50%", border: "2px solid rgba(252,211,77,0.8)", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {localPhotoUrl || member.profileImage ? (
+              <img src={localPhotoUrl || member.profileImage || undefined} crossOrigin="anonymous" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
             ) : (
-              <span style={{ color: "#F6D88E", fontSize: 56, fontWeight: 700 }}>{(member.arabicFullName || member.name || "ع").trim().charAt(0)}</span>
+              <span style={{ color: "#FDE68A", fontSize: 30, fontWeight: 700 }}>{(member.arabicFullName || member.name || "ع").trim().charAt(0)}</span>
             )}
           </div>
-          <div style={{ maxWidth: 480, textAlign: "right" }} dir="rtl">
-            <div style={{ fontSize: 36, fontWeight: 700 }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
-            <div style={{ marginTop: 12, color: "#F6D88E", fontSize: 22 }}>{member.roleLabel}</div>
-            <div style={{ marginTop: 12, color: "#CBD5E1", fontFamily: "monospace", fontSize: 18 }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
+          <div style={{ minWidth: 0, textAlign: "right" }} dir="rtl">
+            <div style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 24, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
+            <div style={{ marginTop: 4, color: "#FDE68A", fontSize: 14 }}>{member.roleLabel}</div>
+            <div style={{ marginTop: 4, color: "rgba(255,255,255,0.7)", fontFamily: "monospace", fontSize: 12, letterSpacing: "0.2em" }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 48 }}>
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 20, marginTop: 24 }} dir="ltr">
           <div style={{ textAlign: "right" }} dir="rtl">
-            <div style={{ display: "inline-block", borderRadius: 18, padding: "8px 16px", backgroundColor: member.approvalStatus === "approved" ? "#065F46" : member.approvalStatus === "rejected" ? "#991B1B" : "#92400E", color: "#FFFFFF", fontSize: 18 }}>{status.label}</div>
-            {positions.length > 0 ? <div style={{ marginTop: 16, color: "#E2E8F0", fontSize: 17 }}>{positions.slice(0, 2).join(" • ")}</div> : null}
+            <div style={{ display: "inline-block", border: `1px solid ${member.approvalStatus === "approved" ? "#A7F3D0" : member.approvalStatus === "rejected" ? "#FECDD3" : "#FDE68A"}`, borderRadius: 999, padding: "5px 10px", backgroundColor: member.approvalStatus === "approved" ? "#D1FAE5" : member.approvalStatus === "rejected" ? "#FFE4E6" : "#FEF3C7", color: member.approvalStatus === "approved" ? "#065F46" : member.approvalStatus === "rejected" ? "#9F1239" : "#92400E", fontSize: 12, fontWeight: 700 }}>{status.label}</div>
+            {positions.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "flex-start", gap: 8, marginTop: 16 }}>
+                {positions.slice(0, 2).map((position) => <span key={position} style={{ border: "1px solid rgba(253,230,138,0.35)", borderRadius: 999, padding: "4px 10px", backgroundColor: "rgba(255,255,255,0.1)", color: "#FEF3C7", fontSize: 12 }}>{position}</span>)}
+              </div>
+            ) : null}
           </div>
           {canVerify ? (
-            <div style={{ borderRadius: 12, backgroundColor: "#FFFFFF", padding: 10 }}><QRCodeSVG value={qrUrl!} size={132} level="M" includeMargin={false} fgColor="#111111" bgColor="#FFFFFF" /></div>
+            <div style={{ borderRadius: 12, backgroundColor: "#FFFFFF", padding: 8 }}><QRCodeSVG value={qrUrl!} size={112} level="M" includeMargin={false} fgColor="#111111" bgColor="#FFFFFF" /></div>
           ) : (
-            <div style={{ width: 132, height: 132, borderRadius: 12, border: "1px solid #64748B", display: "flex", alignItems: "center", justifyContent: "center", color: "#CBD5E1", fontSize: 15, textAlign: "center", padding: 12 }} dir="rtl">يصدر رمز التحقق بعد اعتماد العضوية</div>
+            <div style={{ width: 108, height: 108, borderRadius: 12, border: "1px solid rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, color: "rgba(255,255,255,0.75)", fontSize: 12, textAlign: "center" }} dir="rtl">يصدر رمز التحقق بعد اعتماد العضوية</div>
           )}
         </div>
       </div>
