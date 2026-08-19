@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
@@ -16,9 +15,10 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { UserRound, Clock, XCircle, UsersRound, CalendarCheck } from "lucide-react";
+import { UserRound, Clock, XCircle, UsersRound } from "lucide-react";
 import { Link } from "wouter";
 import MembershipCardPanel from "@/components/MembershipCardPanel";
+import { PersonalActivityCalendar } from "@/components/PersonalActivityCalendar";
 
 const YEAR_LABELS: Record<string, string> = {
   first: "الأولى",
@@ -39,12 +39,6 @@ const ROLE_LABELS: Record<string, string> = {
   supervisor: "مشرف السوشيال ميديا",
   committee_head: "مشرف فريق",
   user: "مستخدم عادي",
-};
-
-const SUBSCRIPTION_STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  pending: { label: "بانتظار الموافقة", className: "bg-amber-100 text-amber-800" },
-  approved: { label: "مقبول", className: "bg-green-100 text-green-800" },
-  rejected: { label: "مرفوض", className: "bg-red-100 text-red-800" },
 };
 
 type EditableFormState = {
@@ -397,44 +391,7 @@ export default function Profile() {
           </CardContent>
         </Card>
 
-        {/* Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-right flex items-center gap-2 justify-end">
-              الأنشطة التي سجلت فيها
-              <CalendarCheck className="w-5 h-5 text-accent" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {subscriptionsLoading ? (
-              <p className="text-muted-foreground text-right">جاري التحميل...</p>
-            ) : mySubscriptions && mySubscriptions.length > 0 ? (
-              <div className="grid gap-3">
-                {mySubscriptions.map((sub) => {
-                  const statusInfo = SUBSCRIPTION_STATUS_LABELS[sub.status] || SUBSCRIPTION_STATUS_LABELS.pending;
-                  return (
-                    <Link key={sub.subscriptionId} href={`/activities/${sub.activityId}`}>
-                      <div className="p-4 rounded-lg border border-border hover:border-accent transition-colors cursor-pointer">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-                          <p className="font-semibold text-right flex-1">{sub.title}</p>
-                        </div>
-                        {sub.startDate && (
-                          <p className="text-sm text-muted-foreground text-right mt-1">
-                            {new Date(sub.startDate).toLocaleDateString("ar-EG")}
-                            {sub.location ? ` - ${sub.location}` : ""}
-                          </p>
-                        )}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-right">لم تسجل في أي نشاط بعد</p>
-            )}
-          </CardContent>
-        </Card>
+        <PersonalActivityCalendar registrations={mySubscriptions ?? []} isLoading={subscriptionsLoading} />
       </div>
     </div>
   );

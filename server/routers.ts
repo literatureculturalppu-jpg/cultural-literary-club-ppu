@@ -358,18 +358,6 @@ export const appRouter = router({
     list: publicProcedure.query(async () => {
       return getActivities();
     }),
-    calendar: publicProcedure.query(async () => {
-      const now = new Date();
-      const start = new Date(now.getFullYear() - 1, now.getMonth(), 1);
-      const end = new Date(now.getFullYear() + 2, now.getMonth(), 1);
-      const activities = await getActivities();
-      return activities
-        .filter((activity) => {
-          const eventDate = new Date(activity.startDate);
-          return eventDate >= start && eventDate < end;
-        })
-        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    }),
     getById: publicProcedure.input(z.number()).query(async ({ input }) => {
       return getActivityById(input);
     }),

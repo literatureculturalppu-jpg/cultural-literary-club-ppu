@@ -28,7 +28,6 @@ export default function Navigation() {
     { href: "/", label: "الرئيسية" },
     { href: "/about", label: "عن النادي" },
     { href: "/activities", label: "الأنشطة" },
-    { href: "/calendar", label: "التقويم" },
     { href: "/articles", label: "المقالات" },
     { href: "/achievements", label: "الإنجازات" },
     { href: "/books", label: "الكتب" },
