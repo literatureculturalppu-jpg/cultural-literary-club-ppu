@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+
+declare global {
+  interface Window {
+    ReactNativeWebView?: { postMessage: (message: string) => void };
+  }
+}
 
 const YEAR_LABELS: Record<string, string> = {
   first: "الأولى",
@@ -33,6 +40,50 @@ const STATUS: Record<string, { label: string; className: string }> = {
   rejected: { label: "العضوية غير معتمدة", className: "bg-rose-100 text-rose-800 border-rose-200" },
 };
 
+type ExportFormat = "png" | "pdf";
+
+function blobToBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const base64 = result.split(",", 2)[1];
+      if (!base64) return reject(new Error("تعذر تجهيز ملف البطاقة."));
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("تعذر تجهيز ملف البطاقة."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+async function downloadGeneratedCard(blob: Blob, filename: string, mimeType: string) {
+  const nativeBridge = window.ReactNativeWebView;
+  if (nativeBridge) {
+    const base64 = await blobToBase64(blob);
+    nativeBridge.postMessage(JSON.stringify({
+      type: "club-card-download",
+      filename,
+      mimeType,
+      base64,
+    }));
+    return "native" as const;
+  }
+  triggerBrowserDownload(blob, filename);
+  return "browser" as const;
+}
+
 function Value({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="rounded-xl border border-border/70 bg-background/50 p-3 text-right">
@@ -48,7 +99,7 @@ export default function MembershipCardPanel() {
   const exportCardRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [exportFormat, setExportFormat] = useState<"png" | "pdf" | null>(null);
+  const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
   const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null>(null);
   const [photoOffset, setPhotoOffset] = useState({ x: 0, y: 0 });
   const [photoScale, setPhotoScale] = useState(1);
@@ -86,7 +137,7 @@ export default function MembershipCardPanel() {
     setPhotoOffset({ x: nextX, y: nextY });
   };
 
-  const chooseExportFormat = (format: "png" | "pdf") => {
+  const chooseExportFormat = (format: ExportFormat) => {
     setExportFormat(format);
     window.setTimeout(() => imageInputRef.current?.click(), 0);
   };
@@ -101,18 +152,28 @@ export default function MembershipCardPanel() {
         useCORS: true,
         logging: false,
       });
-      const fileBaseName = `بطاقة-عضوية-${new Date().toISOString().slice(0, 10)}`;
+      const fileBaseName = `membership-card-${new Date().toISOString().slice(0, 10)}`;
+      let blob: Blob;
+      let filename: string;
+      let mimeType: string;
       if (exportFormat === "png") {
-        const link = document.createElement("a");
-        link.download = `${fileBaseName}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
+        blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((value) => value ? resolve(value) : reject(new Error("تعذر إنشاء صورة البطاقة.")), "image/png", 0.95);
+        });
+        filename = `${fileBaseName}.png`;
+        mimeType = "image/png";
       } else {
         const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [canvas.width, canvas.height] });
         pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
-        pdf.save(`${fileBaseName}.pdf`);
+        blob = pdf.output("blob");
+        filename = `${fileBaseName}.pdf`;
+        mimeType = "application/pdf";
       }
+      const destination = await downloadGeneratedCard(blob, filename, mimeType);
       setSaveDialogOpen(false);
+      toast.success(destination === "native" ? "جارٍ حفظ البطاقة على جهازك." : "بدأ تنزيل البطاقة.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر تنزيل البطاقة. حاول مرة أخرى.");
     } finally {
       setIsExporting(false);
     }
