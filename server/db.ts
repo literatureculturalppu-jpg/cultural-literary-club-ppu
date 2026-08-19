@@ -1,5 +1,6 @@
 import { eq, desc, and, inArray, isNotNull, ne, sql, lte, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import crypto from "crypto";
 import { Pool } from "pg";
 import { InsertUser, users, referenceNumberCounters } from "../drizzle/schema.js";
 import {
@@ -61,6 +62,7 @@ import {
   type InsertWorkLog,
   mobileDevices,
   mobileAuthCodes,
+  membershipCards,
 } from "../drizzle/schema.js";
 import { ENV, isProtectedAdminEmail, isTechAdminEmail } from './_core/env.js';
 
@@ -1165,6 +1167,154 @@ export async function getTeamsForUser(userId: number) {
     .where(eq(teamMembers2.userId, userId));
 
   return rows;
+}
+
+const MEMBERSHIP_ROLE_LABELS: Record<string, string> = {
+  admin: "مسؤول",
+  general_agent: "وكيل عام",
+  tech_admin: "المدير التقني",
+  supervisor: "مشرف",
+  committee_head: "مشرف فريق",
+  user: "عضو النادي",
+};
+
+async function getMembershipPositions(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const [headedTeams, memberTeams] = await Promise.all([
+    db.select({ name: teams.name }).from(teams).where(eq(teams.headId, userId)),
+    db
+      .select({ name: teams.name })
+      .from(teamMembers2)
+      .innerJoin(teams, eq(teamMembers2.teamId, teams.id))
+      .where(eq(teamMembers2.userId, userId)),
+  ]);
+
+  const positions = headedTeams.map((team) => `مشرف ${team.name}`);
+  const headedNames = new Set(headedTeams.map((team) => team.name));
+  memberTeams
+    .filter((team) => !headedNames.has(team.name))
+    .forEach((team) => positions.push(`عضو في ${team.name}`));
+
+  return positions;
+}
+
+async function getOrCreateMembershipCard(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db.select().from(membershipCards).where(eq(membershipCards.userId, userId)).limit(1);
+  if (existing[0]) return existing[0];
+
+  // A 256-bit opaque random token has no member data and cannot be guessed.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    await db
+      .insert(membershipCards)
+      .values({ userId, verificationToken })
+      .onConflictDoNothing();
+    const created = await db.select().from(membershipCards).where(eq(membershipCards.userId, userId)).limit(1);
+    if (created[0]) return created[0];
+  }
+
+  throw new Error("تعذر إصدار بطاقة العضوية، يرجى المحاولة مرة أخرى");
+}
+
+function toMembershipCardMember(user: typeof users.$inferSelect) {
+  return {
+    id: user.id,
+    name: user.name,
+    arabicFullName: user.arabicFullName,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    whatsapp: user.whatsapp,
+    universityId: user.universityId,
+    college: user.college,
+    department: user.department,
+    specialization: user.specialization,
+    academicYear: user.academicYear,
+    dateOfBirth: user.dateOfBirth,
+    culturalExperience: user.culturalExperience,
+    profileImage: user.profileImage,
+    referenceNumber: user.referenceNumber,
+    approvalStatus: user.approvalStatus,
+    approvedAt: user.approvedAt,
+    role: user.role,
+    roleLabel: MEMBERSHIP_ROLE_LABELS[user.role] ?? "عضو النادي",
+    joinedAt: user.createdAt,
+  };
+}
+
+/** The owner sees their complete card data; QR issuance waits for membership approval. */
+export async function getMyMembershipCard(userId: number) {
+  const user = await getUserById(userId);
+  if (!user) return null;
+
+  const positions = await getMembershipPositions(userId);
+  const isEligible = user.approvalStatus === "approved" && user.onboardingCompleted;
+  const card = isEligible ? await getOrCreateMembershipCard(userId) : null;
+
+  return {
+    member: toMembershipCardMember(user),
+    positions: positions.length > 0 ? positions : [MEMBERSHIP_ROLE_LABELS[user.role] ?? "عضو النادي"],
+    isEligible,
+    card: card
+      ? {
+          verificationToken: card.verificationToken,
+          issuedAt: card.issuedAt,
+          isRevoked: card.isRevoked,
+        }
+      : null,
+  };
+}
+
+/** QR verification returns only the data needed for an in-person admin check. */
+export async function verifyMembershipCard(token: string, verifierId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const rows = await db
+    .select({ card: membershipCards, user: users })
+    .from(membershipCards)
+    .innerJoin(users, eq(membershipCards.userId, users.id))
+    .where(eq(membershipCards.verificationToken, token))
+    .limit(1);
+
+  const record = rows[0];
+  const isValid = Boolean(
+    record &&
+      !record.card.isRevoked &&
+      record.user.approvalStatus === "approved" &&
+      record.user.onboardingCompleted
+  );
+
+  if (!record || !isValid) return { valid: false as const };
+
+  await db
+    .update(membershipCards)
+    .set({ lastVerifiedAt: new Date(), lastVerifiedBy: verifierId })
+    .where(eq(membershipCards.id, record.card.id));
+
+  return {
+    valid: true as const,
+    member: {
+      id: record.user.id,
+      arabicFullName: record.user.arabicFullName || record.user.name,
+      profileImage: record.user.profileImage,
+      referenceNumber: record.user.referenceNumber,
+      universityId: record.user.universityId,
+      college: record.user.college,
+      department: record.user.department,
+      specialization: record.user.specialization,
+      academicYear: record.user.academicYear,
+      role: record.user.role,
+      roleLabel: MEMBERSHIP_ROLE_LABELS[record.user.role] ?? "عضو النادي",
+      approvedAt: record.user.approvedAt,
+    },
+    positions: await getMembershipPositions(record.user.id),
+    verifiedAt: new Date(),
+  };
 }
 
 // Registration Requests queries

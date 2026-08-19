@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { UserRound, Clock, XCircle, UsersRound, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
+import MembershipCardPanel from "@/components/MembershipCardPanel";
 
 const YEAR_LABELS: Record<string, string> = {
   first: "الأولى",
@@ -189,6 +190,8 @@ export default function Profile() {
             </AlertDescription>
           </Alert>
         )}
+
+        <MembershipCardPanel />
 
         <Card>
           <CardHeader>

@@ -64,6 +64,7 @@ const QuickLinks = lazy(() => import("./pages/QuickLinks"));
 const AdminActivityRegistrations = lazy(() => import("./pages/AdminActivityRegistrations"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfUse = lazy(() => import("./pages/TermsOfUse"));
+const MembershipCardVerify = lazy(() => import("./pages/MembershipCardVerify"));
 const MeetingsSettings = lazy(() => import("./pages/MeetingsSettings"));
 const MeetingRoom = lazy(() => import("./pages/MeetingRoom"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -120,6 +121,7 @@ function Router() {
         <Route path={"/admin/registration-settings"} component={RegistrationSettings} />
         <Route path={"/admin/activities/:id/registrations"} component={AdminActivityRegistrations} />
         <Route path={"/admin/basir-settings"} component={AdminBasirSettings} />
+        <Route path={"/membership/verify/:token"} component={MembershipCardVerify} />
 
         <Route path={"/pending-approval"} component={PendingApprovalRoute} />
         <Route path={"/onboarding"} component={OnboardingForm} />

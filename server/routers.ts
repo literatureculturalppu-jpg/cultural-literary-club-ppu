@@ -171,6 +171,8 @@ import {
   scheduleWorkLogDeletionMany,
   cancelWorkLogDeletion,
   cancelWorkLogDeletionMany,
+  getMyMembershipCard,
+  verifyMembershipCard,
 } from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
 import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
@@ -1591,6 +1593,20 @@ export const appRouter = router({
     getMyActivitySubscriptions: protectedProcedure.query(async ({ ctx }) => {
       return getUserActivitySubscriptionsWithActivity(ctx.user.id);
     }),
+  }),
+
+  membershipCards: router({
+    // The complete card belongs only to the signed-in member who owns it.
+    mine: protectedProcedure.query(async ({ ctx }) => {
+      return getMyMembershipCard(ctx.user.id);
+    }),
+    // The opaque token from the QR code is only meaningful to a permitted
+    // administrator; no public endpoint reveals member identity data.
+    verify: adminProcedure
+      .input(z.object({ token: z.string().regex(/^[a-f0-9]{64}$/i, "رمز البطاقة غير صالح") }))
+      .query(async ({ input, ctx }) => {
+        return verifyMembershipCard(input.token, ctx.user.id);
+      }),
   }),
 
   // ── Self-service profile edit requests ────────────────────────────────────

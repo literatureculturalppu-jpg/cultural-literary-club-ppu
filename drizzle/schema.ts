@@ -98,6 +98,24 @@ export const referenceNumberCounters = pgTable("referenceNumberCounters", {
 });
 
 /**
+ * A membership card is issued to an approved user only. The QR code contains
+ * this opaque random token—not an ID, email, phone number, or other personal
+ * information—so the server remains the only source of member details.
+ */
+export const membershipCards = pgTable("membershipCards", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  verificationToken: varchar("verificationToken", { length: 64 }).notNull().unique(),
+  issuedAt: timestamp("issuedAt").defaultNow().notNull(),
+  lastVerifiedAt: timestamp("lastVerifiedAt"),
+  lastVerifiedBy: integer("lastVerifiedBy"),
+  isRevoked: boolean("isRevoked").default(false).notNull(),
+});
+
+export type MembershipCard = typeof membershipCards.$inferSelect;
+export type InsertMembershipCard = typeof membershipCards.$inferInsert;
+
+/**
  * Activities/Events table for storing club activities and events
  */
 export const activities = pgTable("activities", {
