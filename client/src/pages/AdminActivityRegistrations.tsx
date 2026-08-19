@@ -4,7 +4,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, UserCheck, UserPlus, Users, Phone, Mail, Hash, Check, X } from "lucide-react";
+import { ArrowRight, Bell, Loader2, Mail, Send, UserCheck, UserPlus, Users } from "lucide-react";
+import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 
 function StatusBadge({ status }: { status: string }) {
@@ -31,6 +32,23 @@ export default function AdminActivityRegistrations() {
   const rejectSubscription = trpc.activityRegistrations.rejectSubscription.useMutation({ onSuccess: () => { toast.success("تم الرفض"); refetch(); }, onError: e => toast.error(e.message) });
   const approveGuest = trpc.activityRegistrations.approveGuest.useMutation({ onSuccess: () => { toast.success("تمت الموافقة"); refetch(); }, onError: e => toast.error(e.message) });
   const rejectGuest = trpc.activityRegistrations.rejectGuest.useMutation({ onSuccess: () => { toast.success("تم الرفض"); refetch(); }, onError: e => toast.error(e.message) });
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastBody, setBroadcastBody] = useState("");
+  const [sendPush, setSendPush] = useState(true);
+  const [sendEmail, setSendEmail] = useState(true);
+  const canBroadcast = user?.role === "admin" || user?.role === "tech_admin";
+  const broadcastToRegistrants = trpc.activityRegistrations.broadcastToRegistrants.useMutation({
+    onSuccess: (result) => {
+      const deliverySummary = [
+        sendPush && `إشعار التطبيق لـ ${result.notificationCount} عضو (${result.pushDelivered} جهاز)`,
+        sendEmail && `بريد إلكتروني: ${result.emailSent} مُرسل`,
+      ].filter(Boolean).join(" — ");
+      toast.success(`تم الإرسال إلى مسجلي النشاط. ${deliverySummary}`);
+      setBroadcastTitle("");
+      setBroadcastBody("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   if (!user || (user.role !== "admin" && user.role !== "general_agent" && user.role !== "tech_admin" && user.role !== "supervisor")) {
     return <div className="container py-16 text-center" dir="rtl"><p className="text-muted-foreground">غير مصرح لك</p></div>;
@@ -38,6 +56,24 @@ export default function AdminActivityRegistrations() {
 
   const memberCount = registrations?.members?.length ?? 0;
   const guestCount = registrations?.guests?.length ?? 0;
+  const submitBroadcast = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!broadcastTitle.trim() || !broadcastBody.trim()) {
+      toast.error("يرجى كتابة عنوان ونص الرسالة");
+      return;
+    }
+    if (!sendPush && !sendEmail) {
+      toast.error("اختر إرسال إشعار للتطبيق أو بريد إلكتروني واحدًا على الأقل");
+      return;
+    }
+    broadcastToRegistrants.mutate({
+      activityId,
+      title: broadcastTitle.trim(),
+      body: broadcastBody.trim(),
+      sendPush,
+      sendEmail,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
@@ -73,6 +109,51 @@ export default function AdminActivityRegistrations() {
             </Card>
           ) : (
             <>
+              {canBroadcast && (
+                <Card className="p-5 md:p-6 border-accent/30 bg-accent/[0.03]">
+                  <form onSubmit={submitBroadcast} className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 shrink-0 rounded-lg bg-accent/15 flex items-center justify-center">
+                        <Bell className="w-5 h-5 text-accent" />
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-lg">إرسال رسالة إلى جميع المسجلين</h2>
+                        <p className="text-sm text-muted-foreground mt-1">يشمل الأعضاء والضيوف المسجلين في هذا النشاط فقط. يصل الإشعار للأعضاء عبر التطبيق، ويصل البريد للأعضاء والضيوف المسجلين ببريد إلكتروني.</p>
+                      </div>
+                    </div>
+                    <input
+                      className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                      value={broadcastTitle}
+                      onChange={(event) => setBroadcastTitle(event.target.value)}
+                      maxLength={255}
+                      placeholder="عنوان الإشعار والبريد"
+                    />
+                    <textarea
+                      className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent resize-y"
+                      value={broadcastBody}
+                      onChange={(event) => setBroadcastBody(event.target.value)}
+                      rows={5}
+                      maxLength={1000}
+                      placeholder="اكتب الرسالة التي تريد إرسالها لجميع المسجلين"
+                    />
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-sm">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={sendPush} onChange={(event) => setSendPush(event.target.checked)} />
+                        <Bell className="w-4 h-4 text-accent" /> إرسال إشعار للتطبيق للأعضاء
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={sendEmail} onChange={(event) => setSendEmail(event.target.checked)} />
+                        <Mail className="w-4 h-4 text-accent" /> إرسال بريد إلكتروني للجميع
+                      </label>
+                    </div>
+                    <Button type="submit" className="w-full sm:w-auto" disabled={broadcastToRegistrants.isPending || (!sendPush && !sendEmail)}>
+                      {broadcastToRegistrants.isPending ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <Send className="w-4 h-4 ml-2" />}
+                      {broadcastToRegistrants.isPending ? "جارِ الإرسال..." : "إرسال للجميع"}
+                    </Button>
+                  </form>
+                </Card>
+              )}
+
               {/* أعضاء */}
               <div>
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -98,10 +179,29 @@ export default function AdminActivityRegistrations() {
                             <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(m.subscribedAt).toLocaleDateString("ar-SA")}</td>
                             <td className="px-4 py-3"><StatusBadge status={m.status || "pending"} /></td>
                             <td className="px-4 py-3">
-                              <div className="flex gap-1">
-                                <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white h-7 px-2" onClick={() => approveSubscription.mutate(m.id)} disabled={m.status === "approved"}><Check className="w-3 h-3" /></Button>
-                                <Button size="sm" className="bg-red-500 hover:bg-red-600 text-white h-7 px-2" onClick={() => rejectSubscription.mutate(m.id)} disabled={m.status === "rejected"}><X className="w-3 h-3" /></Button>
-                              </div>
+                              {(m.status || "pending") === "pending" ? (
+                                <div className="flex gap-2 whitespace-nowrap">
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white h-8 px-3"
+                                    onClick={() => approveSubscription.mutate(m.id)}
+                                    disabled={approveSubscription.isPending || rejectSubscription.isPending}
+                                  >
+                                    {approveSubscription.isPending ? "جارِ القبول..." : "قبول"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-8 px-3"
+                                    onClick={() => rejectSubscription.mutate(m.id)}
+                                    disabled={approveSubscription.isPending || rejectSubscription.isPending}
+                                  >
+                                    {rejectSubscription.isPending ? "جارِ الرفض..." : "رفض"}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">تم اتخاذ الإجراء</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -139,10 +239,29 @@ export default function AdminActivityRegistrations() {
                             <td className="px-3 py-3 text-muted-foreground" dir="ltr">{g.whatsapp || "—"}</td>
                             <td className="px-3 py-3"><StatusBadge status={g.status || "pending"} /></td>
                             <td className="px-3 py-3">
-                              <div className="flex gap-1">
-                                <Button size="sm" className="bg-green-500 hover:bg-green-600 text-white h-7 px-2" onClick={() => approveGuest.mutate(g.id)} disabled={g.status === "approved"}><Check className="w-3 h-3" /></Button>
-                                <Button size="sm" className="bg-red-500 hover:bg-red-600 text-white h-7 px-2" onClick={() => rejectGuest.mutate(g.id)} disabled={g.status === "rejected"}><X className="w-3 h-3" /></Button>
-                              </div>
+                              {(g.status || "pending") === "pending" ? (
+                                <div className="flex gap-2 whitespace-nowrap">
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white h-8 px-3"
+                                    onClick={() => approveGuest.mutate(g.id)}
+                                    disabled={approveGuest.isPending || rejectGuest.isPending}
+                                  >
+                                    {approveGuest.isPending ? "جارِ القبول..." : "قبول"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-8 px-3"
+                                    onClick={() => rejectGuest.mutate(g.id)}
+                                    disabled={approveGuest.isPending || rejectGuest.isPending}
+                                  >
+                                    {rejectGuest.isPending ? "جارِ الرفض..." : "رفض"}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">تم اتخاذ الإجراء</span>
+                              )}
                             </td>
                           </tr>
                         ))}

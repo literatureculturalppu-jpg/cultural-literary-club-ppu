@@ -1,7 +1,7 @@
  import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { activityApproverProcedure, publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
+import { activityApproverProcedure, adminProcedure, broadcastProcedure, publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
 import { TRPCError } from "@trpc/server";
 
 import { z } from "zod";
@@ -3116,6 +3116,144 @@ export const appRouter = router({
             cause: error,
           });
         }
+      }),
+
+    broadcastToRegistrants: activityApproverProcedure
+      .input(
+        z.object({
+          activityId: z.number().int().positive(),
+          title: z.string().trim().min(1, "يرجى كتابة عنوان الرسالة").max(255),
+          body: z.string().trim().min(1, "يرجى كتابة نص الرسالة").max(1000),
+          sendPush: z.boolean().default(true),
+          sendEmail: z.boolean().default(true),
+        }).refine((data) => data.sendPush || data.sendEmail, {
+          message: "اختر إرسال إشعار أو بريد إلكتروني واحدًا على الأقل",
+          path: ["sendPush"],
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        // الإرسال العام أوسع من مجرد قبول طلب؛ لذا يُقصر على المسؤول
+        // والمدير التقني، ولا يمنح المشرف أو الوكيل العام صلاحية بث الرسائل.
+        if (ctx.user.role !== "admin" && ctx.user.role !== "tech_admin") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "إرسال الرسائل العامة لمسجلي النشاط مقصور على المسؤول والمدير التقني.",
+          });
+        }
+
+        const activity = await getActivityById(input.activityId);
+        if (!activity) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "النشاط غير موجود." });
+        }
+
+        const [members, guests] = await Promise.all([
+          getActivitySubscribersWithUsers(input.activityId),
+          getGuestRegistrationsByActivity(input.activityId),
+        ]);
+
+        const memberUserIds = Array.from(new Set(members.map((member) => member.userId).filter(Boolean)));
+        const emailAudience = new Map<string, { email: string; name: string }>();
+        const addEmailRecipient = (email: string | null | undefined, name: string | null | undefined) => {
+          const normalizedEmail = email?.trim().toLowerCase();
+          if (!normalizedEmail || emailAudience.has(normalizedEmail)) return;
+          emailAudience.set(normalizedEmail, {
+            email: normalizedEmail,
+            name: name?.trim() || "مسجل في النشاط",
+          });
+        };
+
+        members.forEach((member) => addEmailRecipient(member.email, member.arabicFullName || member.name));
+        guests.forEach((guest) => addEmailRecipient(guest.universityEmail, guest.fullName));
+
+        const canCreateInAppNotification = input.sendPush && memberUserIds.length > 0;
+        const canSendEmail = input.sendEmail && emailAudience.size > 0;
+        if (!canCreateInAppNotification && !canSendEmail) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "لا يوجد مسجل يمكن إرسال القنوات المحددة إليه في هذا النشاط.",
+          });
+        }
+
+        let notificationRows: Array<{ id: number; userId: number }> = [];
+        let pushDelivered = 0;
+        if (canCreateInAppNotification) {
+          notificationRows = await createNotificationsForUsers(memberUserIds, {
+            senderId: ctx.user.id,
+            type: "announcement",
+            entityId: activity.id,
+            title: input.title,
+            body: input.body,
+            url: `/activities/${activity.id}`,
+            links: [],
+            attachments: [],
+          });
+          pushDelivered = await sendMobilePushForNotifications(notificationRows, {
+            title: input.title,
+            body: input.body,
+            data: {
+              type: "activity",
+              activityId: String(activity.id),
+              targetUrl: `/activities/${activity.id}`,
+            },
+          });
+        }
+
+        let emailSent = 0;
+        let emailSkipped = 0;
+        if (canSendEmail) {
+          const escapeHtml = (value: string) =>
+            value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const bodyHtml = input.body
+            .split(/\n{2,}/)
+            .map((paragraph) => `<p style="margin:0 0 12px;">${escapeHtml(paragraph).replace(/\n/g, "<br/>")}</p>`)
+            .join("");
+          const senderRoleLabel = ctx.user.role === "tech_admin" ? "المدير التقني" : "المسؤول";
+          const result = await sendPersonalizedBulkEmail(
+            Array.from(emailAudience.values()),
+            input.title,
+            (recipient) => broadcastEmailTemplate({
+              recipientName: recipient.name,
+              subject: input.title,
+              bodyHtml,
+              senderName: ctx.user.name || senderRoleLabel,
+              senderRoleLabel,
+            }),
+            EmailPriority.ADMIN_BROADCAST
+          );
+          emailSent = result.sent;
+          emailSkipped = result.skipped;
+        }
+
+        recordWorkLog({
+          ctx,
+          scope: "elevated",
+          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
+          action: "activity_registrations.broadcast",
+          description: `قام ${ctx.user.name || (ctx.user.role === "tech_admin" ? "المدير التقني" : "المسؤول")} بإرسال رسالة عامة لمسجلي نشاط "${activity.title}"`,
+          entityType: "activity",
+          entityId: activity.id,
+          metadata: {
+            memberRecipientCount: memberUserIds.length,
+            guestRecipientCount: guests.length,
+            emailRecipientCount: emailAudience.size,
+            notificationCount: notificationRows.length,
+            pushDelivered,
+            emailSent,
+            emailSkipped,
+            sendPush: input.sendPush,
+            sendEmail: input.sendEmail,
+          },
+        });
+
+        return {
+          memberRecipientCount: memberUserIds.length,
+          guestRecipientCount: guests.length,
+          emailRecipientCount: emailAudience.size,
+          notificationCount: notificationRows.length,
+          pushDelivered,
+          emailSent,
+          emailSkipped,
+        };
       }),
 
     approveSubscription: activityApproverProcedure
