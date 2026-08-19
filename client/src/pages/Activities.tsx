@@ -48,7 +48,15 @@ function formatTime(d: Date | string) {
 }
 
 // ─── Activity Card ────────────────────────────────────────────────────────────
-function ActivityCard({ activity }: { activity: any }) {
+function ActivityCard({
+  activity,
+  isSubscribed,
+  onSubscriptionChanged,
+}: {
+  activity: any;
+  isSubscribed: boolean;
+  onSubscriptionChanged: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const { user } = useAuth();
@@ -59,16 +67,12 @@ function ActivityCard({ activity }: { activity: any }) {
   const hasPdf   = !!content.pdf;
   const isAdmin  = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
 
-  const { data: isSubscribed, refetch: refetchSub } = trpc.activities.isSubscribed.useQuery(
-    { activityId: activity.id }, { enabled: !!user }
-  );
-
   const memberSubscribe = trpc.activities.subscribe.useMutation({
-    onSuccess: () => { toast.success("تم إرسال طلب تسجيلك! سيتم مراجعته من قبل الإدارة."); refetchSub(); },
+    onSuccess: () => { toast.success("تم إرسال طلب تسجيلك! سيتم مراجعته من قبل الإدارة."); onSubscriptionChanged(); },
     onError: e => toast.error("حدث خطأ: " + e.message),
   });
   const unsubscribe = trpc.activities.unsubscribe.useMutation({
-    onSuccess: () => { toast.success("تم إلغاء تسجيلك."); refetchSub(); },
+    onSuccess: () => { toast.success("تم إلغاء تسجيلك."); onSubscriptionChanged(); },
     onError: e => toast.error("حدث خطأ: " + e.message),
   });
   const pinToggle = trpc.activityPin.toggle.useMutation({
@@ -85,8 +89,8 @@ function ActivityCard({ activity }: { activity: any }) {
       {showModal && (
         <ActivityRegistrationModal
           activity={{ id: activity.id, title: activity.title }}
-          onRegistered={() => { void refetchSub(); }}
-          onClose={() => { setShowModal(false); void refetchSub(); }}
+          onRegistered={onSubscriptionChanged}
+          onClose={() => { setShowModal(false); onSubscriptionChanged(); }}
         />
       )}
 
@@ -238,8 +242,17 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
 export default function Activities() {
   const { data: activities, isLoading } = trpc.activities.list.useQuery();
   const { user } = useAuth();
+  const utils = trpc.useUtils();
+  const { data: subscribedActivityIds = [] } = trpc.activities.mySubscriptionActivityIds.useQuery(undefined, {
+    enabled: Boolean(user),
+    staleTime: 15_000,
+  });
   const isAdmin = user?.role === "admin" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
   const [query, setQuery] = useState("");
+  const subscribedIds = new Set(subscribedActivityIds);
+  const refreshSubscriptions = () => {
+    void utils.activities.mySubscriptionActivityIds.invalidate();
+  };
 
   const filtered = (activities ?? []).filter((a: any) => {
     if (!query.trim()) return true;
@@ -303,13 +316,13 @@ export default function Activities() {
                     <Pin className="w-5 h-5 text-accent" />الأنشطة المثبّتة
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {pinned.map((a: any) => <ActivityCard key={a.id} activity={a} />)}
+                    {pinned.map((a: any) => <ActivityCard key={a.id} activity={a} isSubscribed={subscribedIds.has(a.id)} onSubscriptionChanged={refreshSubscriptions} />)}
                   </div>
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {rest.length > 0
-                  ? rest.slice(0, visibleCount).map((a: any) => <ActivityCard key={a.id} activity={a} />)
+                  ? rest.slice(0, visibleCount).map((a: any) => <ActivityCard key={a.id} activity={a} isSubscribed={subscribedIds.has(a.id)} onSubscriptionChanged={refreshSubscriptions} />)
                   : pinned.length === 0 && (
                       <div className="col-span-full text-center py-12">
                         <p className="text-muted-foreground text-lg">

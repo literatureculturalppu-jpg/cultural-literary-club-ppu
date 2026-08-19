@@ -14,7 +14,9 @@ import Home from "./pages/Home";
 // homepage is only fetched by the browser once the user actually
 // navigates to it, instead of all being bundled into the initial load.
 const About = lazy(() => import("./pages/About"));
-const Activities = lazy(() => import("./pages/Activities"));
+const preloadActivities = () => import("./pages/Activities");
+const preloadActivityDetail = () => import("./pages/ActivityDetail");
+const Activities = lazy(preloadActivities);
 const Articles = lazy(() => import("./pages/Articles"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -32,7 +34,7 @@ const AddMember = lazy(() => import("./pages/AddMember"));
 const AdminTeamMembers = lazy(() => import("./pages/AdminTeamMembers"));
 const Profile = lazy(() => import("./pages/Profile"));
 const AdminExternalLinks = lazy(() => import("./pages/AdminExternalLinks"));
-const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
+const ActivityDetail = lazy(preloadActivityDetail);
 const ArticleDetail = lazy(() => import("./pages/ArticleDetail"));
 const AchievementDetail = lazy(() => import("./pages/AchievementDetail"));
 const Books = lazy(() => import("./pages/Books"));
@@ -144,6 +146,16 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    // بيانات الأنشطة تُطلب بعد فتح مسارها، لكن تحميل الواجهة مقدمًا أثناء
+    // خمول الصفحة يجعل الانتقال إليها أو فتح إشعارها أسرع على الهاتف.
+    const timer = window.setTimeout(() => {
+      void preloadActivities();
+      void preloadActivityDetail();
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">

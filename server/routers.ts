@@ -541,6 +541,10 @@ export const appRouter = router({
       .query(async ({ input, ctx }) => {
         return isUserSubscribedToActivity(input.activityId, ctx.user.id);
       }),
+    mySubscriptionActivityIds: protectedProcedure.query(async ({ ctx }) => {
+      const subscriptions = await getUserActivitySubscriptions(ctx.user.id);
+      return subscriptions.map((subscription) => subscription.activityId);
+    }),
     subscribe: protectedProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }) => {
