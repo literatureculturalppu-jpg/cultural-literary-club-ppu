@@ -261,7 +261,7 @@ export default function AdminDashboard() {
                 <Link href="/admin/work-logs">
                   <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-rose-300 text-rose-700 hover:bg-rose-50">
                     <FileClock className="w-4 h-4" />
-                    سجلات العمل
+                    سجل الأمن
                   </Button>
                 </Link>
               )}

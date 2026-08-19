@@ -159,15 +159,8 @@ export function registerBasirStreamRoute(app: express.Express) {
 
       const newCount = await incrementBasirUsage(user.id);
 
-      // Same audit-log shape the old tRPC mutation wrote, so the "سجل
-      // بصير" admin tab keeps working exactly as before.
-      const conversation = [...messages, { role: "assistant" as const, content: fullText }]
-        .slice(-40)
-        .map((m) => ({
-          role: m.role,
-          content: m.content.length > 3000 ? `${m.content.slice(0, 3000)}…` : m.content,
-        }));
-      const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+      // Record assistant usage for auditing without retaining message text,
+      // previews, keystrokes, or conversation content.
       void logAction({
         scope: "member",
         actorId: user.id,
@@ -178,9 +171,8 @@ export function registerBasirStreamRoute(app: express.Express) {
         entityType: "user",
         entityId: user.id,
         metadata: {
-          lastMessagePreview: lastUserMessage ? lastUserMessage.content.slice(0, 200) : undefined,
+          messageCount: messages.length,
           hadAttachments: !!attachments?.length,
-          conversation,
         },
       });
 

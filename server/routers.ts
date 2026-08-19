@@ -2823,18 +2823,9 @@ export const appRouter = router({
         });
         const newCount = await incrementBasirUsage(ctx.user.id);
 
-        // Log the FULL text conversation (never attachments — those are
-        // never persisted anywhere) so the Technical Manager can open and
-        // review the whole exchange from the work-log dashboard, not just a
-        // short preview. Capped defensively so a single chat can't bloat
-        // the table indefinitely.
-        const conversation = [...input.messages, { role: "assistant" as const, content: response }]
-          .slice(-40)
-          .map((m) => ({
-            role: m.role,
-            content: m.content.length > 3000 ? `${m.content.slice(0, 3000)}…` : m.content,
-          }));
-        const lastUserMessage = [...input.messages].reverse().find(m => m.role === "user");
+        // The audit trail records that the assistant was used, not the
+        // conversation text. This keeps operational auditing useful without
+        // turning it into a keystroke, message, or content-collection system.
         recordWorkLog({
           ctx,
           scope: "member",
@@ -2844,9 +2835,8 @@ export const appRouter = router({
           entityType: "user",
           entityId: ctx.user.id,
           metadata: {
-            lastMessagePreview: lastUserMessage ? lastUserMessage.content.slice(0, 200) : undefined,
+            messageCount: input.messages.length,
             hadAttachments: !!input.attachments?.length,
-            conversation,
           },
         });
         return { response, usage: { used: newCount, limit, remaining: Math.max(0, limit - newCount) } };

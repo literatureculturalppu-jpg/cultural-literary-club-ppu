@@ -719,8 +719,9 @@ export type EmailDailyQuota = typeof emailDailyQuota.$inferSelect;
  *   achievements, etc; approving or rejecting requests; promoting or
  *   demoting another member's role; signing in/out).
  * - scope = "member": ordinary activity from ANY signed-in user (not just
- *   regular members) — e.g. chatting with the Basir assistant, or
- *   registering/subscribing to an activity.
+ *   regular members) — e.g. using the Basir assistant or
+ *   registering/subscribing to an activity. Message text, keystrokes,
+ *   browser fingerprints and raw IP addresses are not stored in this table.
  *
  * `actorRole` is captured at the time of the action (rather than relying on
  * a join against the current `users.role`) so the log stays historically
