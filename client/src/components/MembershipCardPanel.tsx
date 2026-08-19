@@ -145,25 +145,45 @@ export default function MembershipCardPanel() {
   const downloadCard = async () => {
     if (!exportCardRef.current || !exportFormat) return;
     setIsExporting(true);
+    let isolationFrame: HTMLIFrameElement | null = null;
     try {
-      const canvas = await html2canvas(exportCardRef.current, {
+      isolationFrame = document.createElement("iframe");
+      isolationFrame.setAttribute("aria-hidden", "true");
+      Object.assign(isolationFrame.style, { position: "fixed", left: "-10000px", top: "0", width: "1224px", height: "1207px", border: "0", pointerEvents: "none" });
+      document.body.appendChild(isolationFrame);
+
+      const exportDocument = isolationFrame.contentDocument;
+      if (!exportDocument) throw new Error("تعذر تهيئة مساحة تصدير البطاقة.");
+      exportDocument.open();
+      exportDocument.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8" /><style>html,body{margin:0;padding:0;background:#FFFFFF;color:#111111;font-family:Arial,sans-serif;direction:rtl}*{box-sizing:border-box}</style></head><body></body></html>');
+      exportDocument.close();
+
+      const isolatedCard = exportCardRef.current.cloneNode(true) as HTMLDivElement;
+      isolatedCard.removeAttribute("id");
+      isolatedCard.style.position = "static";
+      isolatedCard.style.left = "auto";
+      isolatedCard.style.top = "auto";
+      isolatedCard.querySelectorAll("img").forEach((image) => {
+        const source = image.getAttribute("src");
+        if (source) image.src = new URL(source, window.location.origin).href;
+      });
+      exportDocument.body.appendChild(isolatedCard);
+
+      await new Promise<void>((resolve) => {
+        const frameWindow = isolationFrame?.contentWindow;
+        if (frameWindow) frameWindow.requestAnimationFrame(() => resolve());
+        else window.requestAnimationFrame(() => resolve());
+      });
+      await Promise.all(Array.from(isolatedCard.querySelectorAll("img")).map((image) => image.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      })));
+
+      const canvas = await html2canvas(isolatedCard, {
         backgroundColor: "#FFFFFF",
         scale: 1,
         useCORS: true,
         logging: false,
-        onclone: (clonedDocument) => {
-          // html2canvas 1.x cannot parse Tailwind 4's modern oklch tokens.
-          // The export surface below is deliberately fully styled inline, so
-          // it remains intact after removing the source application's styles.
-          clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => {
-            if (stylesheet instanceof HTMLLinkElement && stylesheet.href.includes("fonts.googleapis.com")) return;
-            stylesheet.remove();
-          });
-          clonedDocument.documentElement.style.setProperty("background", "#FFFFFF", "important");
-          clonedDocument.documentElement.style.setProperty("color", "#111111", "important");
-          clonedDocument.body.style.setProperty("background", "#FFFFFF", "important");
-          clonedDocument.body.style.setProperty("color", "#111111", "important");
-        },
       });
       const fileBaseName = `membership-card-${new Date().toISOString().slice(0, 10)}`;
       let blob: Blob;
@@ -188,6 +208,7 @@ export default function MembershipCardPanel() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر تنزيل البطاقة. حاول مرة أخرى.");
     } finally {
+      isolationFrame?.remove();
       setIsExporting(false);
     }
   };
