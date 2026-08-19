@@ -151,6 +151,16 @@ export default function MembershipCardPanel() {
         scale: 2,
         useCORS: true,
         logging: false,
+        onclone: (clonedDocument) => {
+          // html2canvas 1.x cannot parse Tailwind 4's modern oklch tokens.
+          // The export surface below is deliberately fully styled inline, so
+          // it remains intact after removing the source application's styles.
+          clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
+          clonedDocument.documentElement.style.setProperty("background", "#FFFFFF", "important");
+          clonedDocument.documentElement.style.setProperty("color", "#111111", "important");
+          clonedDocument.body.style.setProperty("background", "#FFFFFF", "important");
+          clonedDocument.body.style.setProperty("color", "#111111", "important");
+        },
       });
       const fileBaseName = `membership-card-${new Date().toISOString().slice(0, 10)}`;
       let blob: Blob;
@@ -417,6 +427,7 @@ export default function MembershipCardPanel() {
 
     <div
       ref={exportCardRef}
+      id="membership-card-export-surface"
       aria-hidden="true"
       style={{
         position: "fixed",
