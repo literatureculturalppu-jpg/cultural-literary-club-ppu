@@ -135,15 +135,6 @@ import {
   createBook,
   updateBook,
   deleteBook,
-  getUserBookShelf,
-  setUserBookShelfStatus,
-  removeUserBookShelfEntry,
-  getActivityCertificates,
-  getActivityCertificateByActivityAndUser,
-  issueActivityCertificate,
-  getUserActivityCertificates,
-  getCertificateByVerificationToken,
-  revokeActivityCertificate,
   getActiveSuggestionRound,
   openSuggestionRound,
   closeSuggestionRound,
@@ -1068,112 +1059,6 @@ export const appRouter = router({
     delete: adminProcedure.input(z.number()).mutation(async ({ input }) => {
       return deleteBook(input);
     }),
-    myShelf: protectedProcedure.query(async ({ ctx }) => {
-      return getUserBookShelf(ctx.user.id);
-    }),
-    setShelfStatus: protectedProcedure
-      .input(z.object({
-        bookId: z.number().int().positive(),
-        status: z.enum(["want_to_read", "reading", "finished"]),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        const entry = await setUserBookShelfStatus(ctx.user.id, input.bookId, input.status);
-        if (!entry) throw new TRPCError({ code: "NOT_FOUND", message: "الكتاب غير موجود." });
-        return entry;
-      }),
-    removeFromShelf: protectedProcedure
-      .input(z.object({ bookId: z.number().int().positive() }))
-      .mutation(async ({ input, ctx }) => {
-        return removeUserBookShelfEntry(ctx.user.id, input.bookId);
-      }),
-  }),
-
-  // ── Verifiable participation certificates ────────────────────────────────
-  activityCertificates: router({
-    mine: protectedProcedure.query(async ({ ctx }) => {
-      return getUserActivityCertificates(ctx.user.id);
-    }),
-    listForActivity: activityApproverProcedure
-      .input(z.number().int().positive())
-      .query(async ({ input }) => getActivityCertificates(input)),
-    getForActivityUser: protectedProcedure
-      .input(z.object({ activityId: z.number().int().positive() }))
-      .query(async ({ input, ctx }) => getActivityCertificateByActivityAndUser(input.activityId, ctx.user.id)),
-    issue: adminProcedure
-      .input(z.object({ activityId: z.number().int().positive(), userId: z.number().int().positive() }))
-      .mutation(async ({ input, ctx }) => {
-        const activity = await getActivityById(input.activityId);
-        if (!activity) throw new TRPCError({ code: "NOT_FOUND", message: "النشاط غير موجود." });
-        if (new Date(activity.startDate).getTime() > Date.now()) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكن إصدار شهادة قبل موعد بداية النشاط." });
-        }
-        const members = await getActivitySubscribersWithUsers(input.activityId);
-        const registration = members.find((member) => member.userId === input.userId);
-        if (!registration || registration.status !== "approved") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "تُصدر الشهادة للمشارك العضو المعتمد في النشاط فقط." });
-        }
-        const certificate = await issueActivityCertificate({
-          activityId: input.activityId,
-          userId: input.userId,
-          recipientName: registration.arabicFullName || registration.name || "عضو النادي",
-          issuedBy: ctx.user.id,
-        });
-        await createNotificationsForUsers([input.userId], {
-          senderId: ctx.user.id,
-          type: "announcement",
-          entityId: certificate.id,
-          title: "صدرت شهادتك الإلكترونية",
-          body: `شهادة مشاركة في نشاط «${activity.title}» أصبحت جاهزة للتنزيل والتحقق.`,
-          url: `/certificates/${certificate.verificationToken}`,
-          links: [],
-          attachments: [],
-        });
-        recordWorkLog({
-          ctx,
-          scope: "elevated",
-          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
-          action: "activity_certificate.issue",
-          description: `قام ${ctx.user.name || "مستخدم"} بإصدار شهادة مشاركة في نشاط "${activity.title}"`,
-          entityType: "activityCertificate",
-          entityId: certificate.id,
-          metadata: { activityId: input.activityId, userId: input.userId },
-        });
-        return certificate;
-      }),
-    revoke: adminProcedure
-      .input(z.object({ id: z.number().int().positive() }))
-      .mutation(async ({ input, ctx }) => {
-        const result = await revokeActivityCertificate(input.id);
-        recordWorkLog({
-          ctx,
-          scope: "elevated",
-          actor: { id: ctx.user.id, name: ctx.user.name, role: ctx.user.role },
-          action: "activity_certificate.revoke",
-          description: `قام ${ctx.user.name || "مستخدم"} بإلغاء شهادة مشاركة رقم ${input.id}`,
-          entityType: "activityCertificate",
-          entityId: input.id,
-        });
-        return result;
-      }),
-    verify: publicProcedure
-      .input(z.string().regex(/^[a-f0-9]{64}$/i, "رمز الشهادة غير صالح."))
-      .query(async ({ input }) => {
-        const result = await getCertificateByVerificationToken(input);
-        if (!result || result.certificate.revokedAt) return { valid: false as const };
-        return {
-          valid: true as const,
-          certificate: {
-            certificateNumber: result.certificate.certificateNumber,
-            recipientName: result.certificate.recipientName,
-            issuedAt: result.certificate.issuedAt,
-          },
-          activity: {
-            id: result.activity.id,
-            title: result.activity.title,
-            startDate: result.activity.startDate,
-          },
-        };
-      }),
   }),
 
   // ── Member book suggestions ("اقتراحات الأعضاء") ───────────────────────────

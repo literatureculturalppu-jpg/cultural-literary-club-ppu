@@ -7,11 +7,10 @@ import { Link, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useInfiniteReveal } from "@/hooks/useInfiniteReveal";
-import { READING_STATUS_LABELS, ReadingStatusControl, type ReadingStatus } from "@/components/ReadingStatusControl";
 import {
   Search, BookOpen, CheckCircle2, XCircle, Star, Plus, Trash2, Vote,
   Lock, Unlock, ExternalLink, Download, Sparkles, ImagePlus, X, BookMarked,
-  Calendar as CalendarIcon, Layers, Hash, Pin, Filter, ListChecks,
+  Calendar as CalendarIcon, Layers, Hash, Pin,
 } from "lucide-react";
 
 const inputClass = "w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent text-sm";
@@ -264,24 +263,11 @@ function BookSearchSection({ initialQuery }: { initialQuery?: string }) {
 }
 
 // ─────────────────────────── Section 1: الكتب المختومة ─────────────────────
-function SealedBooksSection({ isAdmin, isAuthenticated }: { isAdmin: boolean; isAuthenticated: boolean }) {
+function SealedBooksSection({ isAdmin }: { isAdmin: boolean }) {
   const { data: books, refetch } = trpc.books.list.useQuery();
-  const { data: shelfEntries = [] } = trpc.books.myShelf.useQuery(undefined, { enabled: isAuthenticated });
   const { data: articles } = trpc.articles.list.useQuery();
   const publishedArticles = (articles ?? []).filter((a: any) => a.published);
-  const [libraryQuery, setLibraryQuery] = useState("");
-  const [genreFilter, setGenreFilter] = useState("all");
-  const [readingFilter, setReadingFilter] = useState<"all" | ReadingStatus>("all");
-  const shelfStatusByBook = new Map(shelfEntries.map((entry: any) => [entry.bookId, entry.status as ReadingStatus]));
-  const genres = Array.from(new Set((books ?? []).map((book: any) => book.genre).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "ar"));
-  const filteredBooks = (books ?? []).filter((book: any) => {
-    const normalizedQuery = libraryQuery.trim().toLowerCase();
-    const matchesQuery = !normalizedQuery || [book.title, book.author, book.genre, book.summary].some((value) => value?.toLowerCase().includes(normalizedQuery));
-    const matchesGenre = genreFilter === "all" || book.genre === genreFilter;
-    const matchesReading = readingFilter === "all" || shelfStatusByBook.get(book.id) === readingFilter;
-    return matchesQuery && matchesGenre && matchesReading;
-  });
-  const { visibleCount, sentinelRef } = useInfiniteReveal(filteredBooks.length);
+  const { visibleCount, sentinelRef } = useInfiniteReveal(books?.length ?? 0);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [selectedBook, setSelectedBook] = useState<any>(null);
@@ -536,32 +522,11 @@ function SealedBooksSection({ isAdmin, isAuthenticated }: { isAdmin: boolean; is
         </Card>
       )}
 
-      <Card className="p-4 md:p-5 mb-6 bg-muted/20 border-border/70">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-4 h-4 text-accent" />
-          <h3 className="font-bold text-sm text-foreground">ابحث ورتّب مكتبتك</h3>
-          {isAuthenticated && <span className="mr-auto text-xs text-muted-foreground flex items-center gap-1"><ListChecks className="w-3.5 h-3.5" />{shelfEntries.length} في قائمتي</span>}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="ابحث بالعنوان أو المؤلف أو الوصف..." className={inputClass} />
-          <select value={genreFilter} onChange={(event) => setGenreFilter(event.target.value)} className={inputClass}>
-            <option value="all">كل التصنيفات</option>
-            {genres.map((genre) => <option key={String(genre)} value={String(genre)}>{String(genre)}</option>)}
-          </select>
-          <select value={readingFilter} onChange={(event) => setReadingFilter(event.target.value as "all" | ReadingStatus)} className={inputClass} disabled={!isAuthenticated}>
-            <option value="all">كل حالات القراءة</option>
-            {Object.entries(READING_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </div>
-      </Card>
-
       {!books || books.length === 0 ? (
         <p className="text-muted-foreground text-center py-8">لم تتم إضافة أي كتاب بعد</p>
       ) : (
-        <>
-          {filteredBooks.length === 0 && <p className="text-muted-foreground text-center py-8 border border-dashed border-border rounded-xl">لا توجد كتب تطابق التصفية المختارة.</p>}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 md:gap-6">
-          {filteredBooks.slice(0, visibleCount).map((b: any) => (
+          {books.slice(0, visibleCount).map((b: any) => (
             <Card
               key={b.id}
               onClick={() => setSelectedBook(b)}
@@ -617,10 +582,6 @@ function SealedBooksSection({ isAdmin, isAuthenticated }: { isAdmin: boolean; is
 
                 {b.summary && <p className="text-xs text-foreground/80 mt-2 line-clamp-3">{b.summary}</p>}
 
-                <div className="mt-3">
-                  <ReadingStatusControl bookId={b.id} status={shelfStatusByBook.get(b.id)} isAuthenticated={isAuthenticated} compact />
-                </div>
-
                 {b.articleId && (
                   <Link href={`/articles/${b.articleId}`} onClick={(e) => e.stopPropagation()}>
                     <Button variant="link" className="px-0 h-auto mt-2 text-accent text-xs">قراءة المقالة المرتبطة ←</Button>
@@ -630,9 +591,8 @@ function SealedBooksSection({ isAdmin, isAuthenticated }: { isAdmin: boolean; is
             </Card>
           ))}
         </div>
-        </>
       )}
-      {filteredBooks.length > 0 && visibleCount < filteredBooks.length && <div ref={sentinelRef} className="h-1" />}
+      {books && visibleCount < books.length && <div ref={sentinelRef} className="h-1" />}
 
       {selectedBook && (
         <BookDetailModal
@@ -888,7 +848,7 @@ function VotePollSection({ isAdmin }: { isAdmin: boolean }) {
 
 // ─────────────────────────────────── Main page ──────────────────────────────
 export default function Books() {
-  const { user, isAuthenticated } = useAuth();
+  const { user } = useAuth();
   const isAdmin = isAdminRole(user?.role);
   // Lets Basir send members here with a book search pre-filled, e.g. via
   // "[[NAV|/books?q=...|ابحث عن الكتاب]]".
@@ -909,7 +869,7 @@ export default function Books() {
 
       <div className="container py-12 md:py-16">
         <BookSearchSection initialQuery={initialQuery} />
-        <SealedBooksSection isAdmin={isAdmin} isAuthenticated={isAuthenticated} />
+        <SealedBooksSection isAdmin={isAdmin} />
 
         <section>
           <h2 className="text-3xl font-bold text-foreground mb-6">التصويت</h2>

@@ -21,7 +21,6 @@ export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approve
 export const notificationTypeEnum = pgEnum("notification_type", ["article", "activity", "achievement", "book", "announcement", "team_chat", "team_request"]);
 export const bookVoteModeEnum = pgEnum("book_vote_mode", ["single", "multiple"]);
 export const bookVoteStatusEnum = pgEnum("book_vote_status", ["open", "closed"]);
-export const bookReadingStatusEnum = pgEnum("book_reading_status", ["want_to_read", "reading", "finished"]);
 export const teamActionTypeEnum = pgEnum("team_action_type", [
   "add_member",
   "remove_member",
@@ -620,47 +619,6 @@ export const books = pgTable("books", {
 
 export type Book = typeof books.$inferSelect;
 export type InsertBook = typeof books.$inferInsert;
-
-/**
- * A member's personal reading list for club-curated books. It is deliberately
- * separate from the club's completed-reading record on `books`, so a member
- * may track their own journey without modifying shared library data.
- */
-export const userBookShelves = pgTable("userBookShelves", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
-  bookId: integer("bookId").notNull(),
-  status: bookReadingStatusEnum("status").default("want_to_read").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
-}, (table) => [
-  uniqueIndex("userBookShelves_user_book_unique").on(table.userId, table.bookId),
-]);
-
-export type UserBookShelf = typeof userBookShelves.$inferSelect;
-export type InsertUserBookShelf = typeof userBookShelves.$inferInsert;
-
-/**
- * A verifiable participation certificate. Certificates are issued only by an
- * administrative user for an approved activity registration; the recipient
- * name is stored as an immutable issuance snapshot for the rendered document.
- */
-export const activityCertificates = pgTable("activityCertificates", {
-  id: serial("id").primaryKey(),
-  activityId: integer("activityId").notNull(),
-  userId: integer("userId").notNull(),
-  recipientName: varchar("recipientName", { length: 255 }).notNull(),
-  certificateNumber: varchar("certificateNumber", { length: 64 }).notNull().unique(),
-  verificationToken: varchar("verificationToken", { length: 64 }).notNull().unique(),
-  issuedBy: integer("issuedBy").notNull(),
-  issuedAt: timestamp("issuedAt").defaultNow().notNull(),
-  revokedAt: timestamp("revokedAt"),
-}, (table) => [
-  uniqueIndex("activityCertificates_activity_user_unique").on(table.activityId, table.userId),
-]);
-
-export type ActivityCertificate = typeof activityCertificates.$inferSelect;
-export type InsertActivityCertificate = typeof activityCertificates.$inferInsert;
 
 /**
  * A single global "round" of member book suggestions ("اقتراحات الأعضاء").

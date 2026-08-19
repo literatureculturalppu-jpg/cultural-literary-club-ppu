@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { UserRound, Clock, XCircle, UsersRound, CalendarCheck, Award, ExternalLink } from "lucide-react";
+import { UserRound, Clock, XCircle, UsersRound, CalendarCheck } from "lucide-react";
 import { Link } from "wouter";
 import MembershipCardPanel from "@/components/MembershipCardPanel";
 
@@ -101,9 +101,6 @@ export default function Profile() {
     undefined,
     { enabled: Boolean(user) }
   );
-  const { data: myCertificates = [] } = trpc.activityCertificates.mine.useQuery(undefined, {
-    enabled: Boolean(user),
-  });
 
   const createRequest = trpc.profileEditRequests.create.useMutation({
     onSuccess: () => {
@@ -199,27 +196,6 @@ export default function Profile() {
         )}
 
         <MembershipCardPanel />
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-right flex items-center justify-end gap-2"><Award className="w-5 h-5 text-accent" />شهاداتي الإلكترونية</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {myCertificates.length === 0 ? <p className="text-sm text-muted-foreground text-right">ستظهر هنا شهادات مشاركتك الصادرة من إدارة النادي.</p> : (
-              <div className="space-y-3">
-                {myCertificates.map((entry: any) => (
-                  <div key={entry.certificate.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border bg-muted/15">
-                    <div className="text-right">
-                      <p className="font-semibold text-sm">{entry.activity.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">صدرت في {new Date(entry.certificate.issuedAt).toLocaleDateString("ar-SA")}</p>
-                    </div>
-                    <Link href={`/certificates/${entry.certificate.verificationToken}`} target="_blank"><Button size="sm" variant="outline" className="gap-1"><ExternalLink className="w-3.5 h-3.5" />فتح الشهادة</Button></Link>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
