@@ -1,7 +1,13 @@
+import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { QRCodeSVG } from "qrcode.react";
-import { BadgeCheck, CalendarDays, Landmark, LockKeyhole, QrCode, ShieldCheck, UserRound } from "lucide-react";
+import { BadgeCheck, CalendarDays, ImageDown, Landmark, LoaderCircle, LockKeyhole, Move, QrCode, RotateCcw, Save, ShieldCheck, Upload, UserRound } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
 import { trpc } from "@/lib/trpc";
 
 const YEAR_LABELS: Record<string, string> = {
@@ -39,6 +45,78 @@ function Value({ label, value }: { label: string; value?: string | null }) {
 /** The logged-in user's complete digital membership card. */
 export default function MembershipCardPanel() {
   const { data, isLoading, error } = trpc.membershipCards.mine.useQuery();
+  const exportCardRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"png" | "pdf" | null>(null);
+  const [localPhotoUrl, setLocalPhotoUrl] = useState<string | null>(null);
+  const [photoOffset, setPhotoOffset] = useState({ x: 0, y: 0 });
+  const [photoScale, setPhotoScale] = useState(1);
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (localPhotoUrl) URL.revokeObjectURL(localPhotoUrl);
+    };
+  }, [localPhotoUrl]);
+
+  const resetLocalPhoto = () => {
+    if (localPhotoUrl) URL.revokeObjectURL(localPhotoUrl);
+    setLocalPhotoUrl(null);
+    setPhotoOffset({ x: 0, y: 0 });
+    setPhotoScale(1);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const handleLocalPhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const [file] = Array.from(event.target.files ?? []);
+    if (!file || !file.type.startsWith("image/")) return;
+    if (localPhotoUrl) URL.revokeObjectURL(localPhotoUrl);
+    setLocalPhotoUrl(URL.createObjectURL(file));
+    setPhotoOffset({ x: 0, y: 0 });
+    setPhotoScale(1);
+  };
+
+  const handlePhotoPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!isDraggingPhoto || !localPhotoUrl) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const nextX = Math.max(-45, Math.min(45, ((event.clientX - rect.left) / rect.width - 0.5) * 100));
+    const nextY = Math.max(-45, Math.min(45, ((event.clientY - rect.top) / rect.height - 0.5) * 100));
+    setPhotoOffset({ x: nextX, y: nextY });
+  };
+
+  const chooseExportFormat = (format: "png" | "pdf") => {
+    setExportFormat(format);
+    window.setTimeout(() => imageInputRef.current?.click(), 0);
+  };
+
+  const downloadCard = async () => {
+    if (!exportCardRef.current || !exportFormat) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(exportCardRef.current, {
+        backgroundColor: "#09090b",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const fileBaseName = `بطاقة-عضوية-${new Date().toISOString().slice(0, 10)}`;
+      if (exportFormat === "png") {
+        const link = document.createElement("a");
+        link.download = `${fileBaseName}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      } else {
+        const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [canvas.width, canvas.height] });
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, canvas.width, canvas.height);
+        pdf.save(`${fileBaseName}.pdf`);
+      }
+      setSaveDialogOpen(false);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -62,14 +140,20 @@ export default function MembershipCardPanel() {
   return (
     <Card className="overflow-hidden border-accent/40" dir="rtl">
       <CardHeader className="border-b border-accent/20 bg-gradient-to-l from-amber-50 via-background to-amber-50/50">
-        <CardTitle className="flex items-center justify-end gap-2 text-right">
-          بطاقة العضوية الرقمية
-          <BadgeCheck className="h-5 w-5 text-accent" />
-        </CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button type="button" variant="outline" className="gap-2" onClick={() => setSaveDialogOpen(true)}>
+            <Save className="h-4 w-4" />
+            حفظ البطاقة
+          </Button>
+          <CardTitle className="flex items-center justify-end gap-2 text-right">
+            بطاقة العضوية الرقمية
+            <BadgeCheck className="h-5 w-5 text-accent" />
+          </CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6 p-4 sm:p-6">
         <section className="overflow-hidden rounded-2xl border border-amber-400/70 bg-black text-white shadow-xl">
-          <div className="relative min-h-[330px] bg-[radial-gradient(circle_at_20%_0%,rgba(217,161,59,0.26),transparent_36%),radial-gradient(circle_at_100%_100%,rgba(217,161,59,0.16),transparent_38%)] p-5 sm:p-7">
+          <div ref={exportCardRef} className="relative min-h-[330px] bg-[radial-gradient(circle_at_20%_0%,rgba(217,161,59,0.26),transparent_36%),radial-gradient(circle_at_100%_100%,rgba(217,161,59,0.16),transparent_38%)] p-5 sm:p-7">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-300 via-amber-500 to-amber-300" />
             <div className="flex items-start justify-between gap-4" dir="ltr">
               <img src="/club-icon-192.png" alt="شعار النادي" className="h-14 w-14 rounded-xl border border-amber-300/60 bg-black object-contain p-1" />
@@ -81,8 +165,18 @@ export default function MembershipCardPanel() {
             </div>
 
             <div className="mt-7 flex items-center justify-between gap-4" dir="ltr">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-amber-300/80 bg-white/10" dir="rtl">
-                {member.profileImage ? (
+              <div
+                className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-amber-300/80 bg-white/10 ${localPhotoUrl ? "cursor-move touch-none" : ""}`}
+                dir="rtl"
+                onPointerDown={localPhotoUrl ? (event) => { event.currentTarget.setPointerCapture(event.pointerId); setIsDraggingPhoto(true); } : undefined}
+                onPointerMove={handlePhotoPointerMove}
+                onPointerUp={localPhotoUrl ? () => setIsDraggingPhoto(false) : undefined}
+                onPointerCancel={localPhotoUrl ? () => setIsDraggingPhoto(false) : undefined}
+                title={localPhotoUrl ? "اسحب الصورة لضبط موضعها" : undefined}
+              >
+                {localPhotoUrl ? (
+                  <img src={localPhotoUrl} alt="الصورة المحلية المختارة" className="h-full w-full object-cover" style={{ transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
+                ) : member.profileImage ? (
                   <img src={member.profileImage} alt="صورة العضو" className="h-full w-full object-cover" />
                 ) : (
                   <UserRound className="h-8 w-8 text-amber-100" />
@@ -173,6 +267,90 @@ export default function MembershipCardPanel() {
           </p>
         )}
       </CardContent>
+
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto" dir="rtl">
+          <DialogHeader className="text-right">
+            <DialogTitle className="flex items-center justify-end gap-2">
+              تخصيص وحفظ بطاقة العضوية
+              <ImageDown className="h-5 w-5 text-accent" />
+            </DialogTitle>
+            <DialogDescription className="text-right leading-6">
+              اختر نوع التنزيل، ثم اختر صورة من جهازك لتظهر مؤقتًا في البطاقة. لا تُرفع الصورة ولا تُحفظ في قاعدة البيانات.
+            </DialogDescription>
+          </DialogHeader>
+
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleLocalPhotoChange} />
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Button type="button" variant={exportFormat === "png" ? "default" : "outline"} className="h-auto min-h-20 flex-col gap-1" onClick={() => chooseExportFormat("png")}>
+              <ImageDown className="h-5 w-5" />
+              <span>حفظ كصورة PNG</span>
+              <span className="text-xs font-normal opacity-80">يفتح معرض الصور لاختيار صورتك</span>
+            </Button>
+            <Button type="button" variant={exportFormat === "pdf" ? "default" : "outline"} className="h-auto min-h-20 flex-col gap-1" onClick={() => chooseExportFormat("pdf")}>
+              <Save className="h-5 w-5" />
+              <span>حفظ كملف PDF</span>
+              <span className="text-xs font-normal opacity-80">يفتح معرض الصور لاختيار صورتك</span>
+            </Button>
+          </div>
+
+          <section className="space-y-4 rounded-xl border bg-muted/30 p-4 text-right">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold">الصورة المحلية</p>
+                <p className="text-xs text-muted-foreground">يمكنك سحب الصورة داخل دائرة البطاقة لتغيير موضعها.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => imageInputRef.current?.click()}>
+                  <Upload className="ml-2 h-4 w-4" />
+                  اختيار صورة
+                </Button>
+                {localPhotoUrl && (
+                  <Button type="button" size="sm" variant="ghost" onClick={resetLocalPhoto}>
+                    <RotateCcw className="ml-2 h-4 w-4" />
+                    استعادة
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {localPhotoUrl ? (
+              <>
+                <div className="flex items-center justify-center">
+                  <div
+                    className="flex h-28 w-28 cursor-move touch-none items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-accent bg-background"
+                    onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); setIsDraggingPhoto(true); }}
+                    onPointerMove={handlePhotoPointerMove}
+                    onPointerUp={() => setIsDraggingPhoto(false)}
+                    onPointerCancel={() => setIsDraggingPhoto(false)}
+                  >
+                    <img src={localPhotoUrl} alt="معاينة الصورة المختارة" className="h-full w-full object-cover" style={{ transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>{Math.round(photoScale * 100)}%</span>
+                    <span className="flex items-center gap-1"><Move className="h-3.5 w-3.5" /> التكبير والموضع</span>
+                  </div>
+                  <Slider value={[photoScale]} min={1} max={3} step={0.05} onValueChange={([value]) => setPhotoScale(value)} />
+                  <p className="text-xs text-muted-foreground">اسحب الصورة داخل الدائرة، ثم استخدم الشريط للتحكم في حجمها.</p>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-lg border border-dashed bg-background p-3 text-sm text-muted-foreground">ستستخدم البطاقة صورة الحساب الحالية إن لم تختر صورة محلية.</p>
+            )}
+          </section>
+
+          <DialogFooter className="sm:flex-row-reverse sm:justify-start">
+            <Button type="button" disabled={!exportFormat || isExporting} onClick={downloadCard}>
+              {isExporting ? <LoaderCircle className="ml-2 h-4 w-4 animate-spin" /> : <Save className="ml-2 h-4 w-4" />}
+              {isExporting ? "جاري التجهيز..." : exportFormat === "pdf" ? "موافق وتنزيل PDF" : "موافق وتنزيل الصورة"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setSaveDialogOpen(false)}>إلغاء</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
