@@ -3,7 +3,6 @@ export const CLUB_ROLES = [
   "admin",
   "supervisor",
   "committee_head",
-  "general_agent",
   "tech_admin",
   "club_president",
   "vice_president",
@@ -19,7 +18,6 @@ export const ROLE_LABELS: Record<ClubRole, string> = {
   admin: "مسؤول",
   supervisor: "مشرف السوشيال ميديا",
   committee_head: "مشرف فريق",
-  general_agent: "الوكيل العام",
   tech_admin: "المدير التقني",
   club_president: "رئيس النادي",
   vice_president: "نائب رئيس النادي",
@@ -34,7 +32,6 @@ export const ADMIN_TIER_ROLES = [
   "club_president",
   "vice_president",
   "public_relations_officer",
-  "general_agent",
   "tech_admin",
 ] as const satisfies readonly ClubRole[];
 
@@ -79,16 +76,11 @@ export function getRoleTransitionDenial(
     return "فقط المدير التقني يمكنه ترقية شخص إلى مدير تقني";
   }
 
-  // The pre-existing general-agent hierarchy is preserved.
-  if (targetRole === "general_agent" && actorRole !== "general_agent" && actorRole !== "tech_admin") {
-    return "لا يمكن تعديل بيانات الوكيل العام أو صلاحياته إلا للوكيل العام أو المدير التقني";
-  }
-
   // Ordinary administrators may never manage higher management roles.
-  if (actorRole === "admin" && ["public_relations_officer", "general_agent"].includes(targetRole ?? "")) {
+  if (actorRole === "admin" && targetRole === "public_relations_officer") {
     return "لا يمكن للمسؤول اتخاذ إجراء بحق منصب إداري أعلى";
   }
-  if (actorRole === "admin" && ["public_relations_officer", "general_agent"].includes(newRole ?? "")) {
+  if (actorRole === "admin" && newRole === "public_relations_officer") {
     return "لا يمكن للمسؤول تعيين منصب إداري أعلى";
   }
 

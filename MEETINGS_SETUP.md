@@ -73,4 +73,4 @@ psql "$DATABASE_URL" -f drizzle/0001_meetings.sql
 بمجرد ضبط المتغيرات الأربعة (`LIVEKIT_URL`, `LIVEKIT_API_KEY`,
 `LIVEKIT_API_SECRET`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`) وإعادة النشر على
 Vercel، ستظهر بطاقة "نظام الاجتماعات الإلكتروني" في لوحة تحكم الأدمن
-(`/admin/meetings-settings`) لكل من admin و general_agent و tech_admin.
+(`/admin/meetings-settings`) لأصحاب المناصب الإدارية والتنظيمية المخوّلة.

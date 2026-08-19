@@ -46,7 +46,7 @@ function getStatusBadge(status: "upcoming" | "ongoing" | "completed") {
 export default function AdminActivities() {
   const { user } = useAuth();
 
-  if (user?.role !== "admin" && user?.role !== "general_agent" && user?.role !== "tech_admin") {
+  if (user?.role !== "admin" && user?.role !== "tech_admin") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">

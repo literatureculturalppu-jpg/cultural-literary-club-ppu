@@ -26,7 +26,7 @@ export default function AdminExternalLinks() {
     isActive: true,
   });
 
-  if (!user || (user.role !== "admin" && user.role !== "general_agent" && user.role !== "tech_admin")) {
+  if (!user || (user.role !== "admin" && user.role !== "tech_admin")) {
     return (
       <div className="container mx-auto px-4 py-12 text-center">
         <h1 className="text-3xl font-bold mb-4">غير مصرح</h1>

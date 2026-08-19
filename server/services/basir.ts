@@ -318,7 +318,6 @@ const ROLE_LABELS: Record<string, string> = {
   public_relations_officer: "مسؤول العلاقات العامة",
   secretary: "أمين السر",
   treasurer: "أمين الصندوق",
-  general_agent: "الوكيل العام",
   tech_admin: "المدير التقني",
 };
 

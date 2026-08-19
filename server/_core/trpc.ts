@@ -60,8 +60,8 @@ const autoWorkLog = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser).use(autoWorkLog);
 
-// Admin-only procedure — requires an authenticated user AND role "admin",
-// "general_agent", or "tech_admin". (Previously this only checked
+// Admin-only procedure — requires an authenticated user with an administrative
+// or leadership role. (Previously this only checked
 // `ctx.user` was truthy, i.e. identical to `protectedProcedure`, so any
 // signed-in user — regardless of role — could call procedures gated by
 // this export, such as `system.notifyOwner`. Fixed to actually enforce the
@@ -102,7 +102,7 @@ export const activityApproverProcedure = protectedProcedure.use(
 );
 
 // إرسال الرسائل العامة يؤثر في جمهور واسع، لذلك يقتصر على المسؤول والمدير
-// التقني فقط، ولا يكتسب المشرف أو الوكيل العام هذه الصلاحية.
+// التقني فقط، ولا يكتسب المشرف أو الأدوار غير الإدارية هذه الصلاحية.
 export const broadcastProcedure = protectedProcedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
@@ -118,7 +118,7 @@ export const broadcastProcedure = protectedProcedure.use(
 
 // Technical-manager-only procedure — requires role "tech_admin" exactly.
 // Used for the "سجلات العمل" (work logs) audit trail, which is intentionally
-// invisible to plain admins and general agents. Built on top of
+// invisible to all roles other than the technical manager. Built on top of
 // `protectedProcedure` so it inherits `autoWorkLog` automatically.
 export const techAdminProcedure = protectedProcedure.use(
   t.middleware(async opts => {

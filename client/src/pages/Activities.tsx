@@ -65,7 +65,7 @@ function ActivityCard({
   const content  = parseContent(activity.content);
   const hasLinks = !!(content.links && content.links.length > 0);
   const hasPdf   = !!content.pdf;
-  const isAdmin  = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
+  const isAdmin  = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "tech_admin" || user?.role === "supervisor";
 
   const memberSubscribe = trpc.activities.subscribe.useMutation({
     onSuccess: () => { toast.success("تم إرسال طلب تسجيلك! سيتم مراجعته من قبل الإدارة."); onSubscriptionChanged(); },
@@ -247,7 +247,7 @@ export default function Activities() {
     enabled: Boolean(user),
     staleTime: 15_000,
   });
-  const isAdmin = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin" || user?.role === "supervisor";
+  const isAdmin = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "tech_admin" || user?.role === "supervisor";
   const [query, setQuery] = useState("");
   const subscribedIds = new Set(subscribedActivityIds);
   const refreshSubscriptions = () => {

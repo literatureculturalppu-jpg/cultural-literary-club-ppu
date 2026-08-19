@@ -71,11 +71,11 @@ export const ENV = {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
   // Comma-separated list of emails that are auto-promoted to the "tech_admin"
-  // (المدير التقني) role on first sign-in. This role sits above both `admin`
-  // and `general_agent`: it has every admin/general-agent permission, plus
+  // (المدير التقني) role on first sign-in. This role sits above all
+  // administrative and leadership roles: it has every administrative permission, plus
   // it is the ONLY role that can promote another member to `tech_admin`,
   // and the only one whose own role/account cannot be edited by an admin or
-  // general agent. Defaults to the club's technical-manager account.
+  // other administrative role. Defaults to the club's technical-manager account.
   techAdminEmails: (process.env.TECH_ADMIN_EMAILS ?? "257812@ppu.edu.ps")
     .split(",")
     .map((s) => s.trim().toLowerCase())

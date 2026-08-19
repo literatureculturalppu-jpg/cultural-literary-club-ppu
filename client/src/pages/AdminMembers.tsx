@@ -29,23 +29,19 @@ function EditModal({ member, viewerRole, viewerId, onClose, onSave }: { member: 
   });
   const [referenceNumber, setReferenceNumber] = useState(member.referenceNumber || "");
   const isViewerTechAdmin = viewerRole === "tech_admin";
-  const isViewerAgent = viewerRole === "general_agent" || isViewerTechAdmin;
   const isViewerLeadership = viewerRole === "club_president" || viewerRole === "vice_president";
   // Only a tech admin may assign the "tech_admin" role (the highest tier),
-  // and only a general agent or tech admin may assign "general_agent". A
-  // general agent may not remove its own agent status, and a tech admin
-  // may not remove its own tech-admin status either.
+  // the club president role, or the vice-president role. A technical manager
+  // may not remove their own technical-manager status.
   const availableRoles = Object.entries(roleLabels).filter(([value]) => {
     if (value === "tech_admin") return isViewerTechAdmin;
     if (value === "club_president" || value === "vice_president") return isViewerTechAdmin;
-    if (value === "general_agent") return isViewerAgent;
-    if (value === "public_relations_officer") return isViewerTechAdmin || isViewerAgent || isViewerLeadership || viewerRole === "public_relations_officer";
+    if (value === "public_relations_officer") return isViewerTechAdmin || isViewerLeadership || viewerRole === "public_relations_officer";
     return true;
   });
   const lockRoleField =
     (member.role === "tech_admin" && (!isViewerTechAdmin || member.id === viewerId)) ||
-    ((member.role === "club_president" || member.role === "vice_president") && !isViewerTechAdmin) ||
-    (member.role === "general_agent" && isViewerAgent && !isViewerTechAdmin && member.id === viewerId);
+    ((member.role === "club_president" || member.role === "vice_president") && !isViewerTechAdmin);
   const update = trpc.adminUsers.update.useMutation({
     onSuccess: () => { toast.success("تم تحديث بيانات العضو"); onSave(); onClose(); },
     onError: e => toast.error("حدث خطأ: " + e.message),
@@ -90,7 +86,7 @@ function EditModal({ member, viewerRole, viewerId, onClose, onSave }: { member: 
                 {availableRoles.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
               </select>
               {lockRoleField && (
-                <p className="text-xs text-muted-foreground mt-1">لا يمكن للوكيل العام إزالة صلاحيته عن نفسه</p>
+                <p className="text-xs text-muted-foreground mt-1">تغيير صلاحية هذا العضو متاح للمدير التقني فقط.</p>
               )}</div>
             <div><label className="block text-xs font-medium mb-1">رقم الهاتف</label>
               <input type="tel" value={form.phoneNumber} onChange={e => setForm({...form, phoneNumber: e.target.value})} className={inputClass} dir="ltr" /></div>
@@ -265,7 +261,7 @@ export default function AdminMembers() {
                       <td className="px-3 py-3 text-muted-foreground" dir="ltr">{m.phoneNumber || "—"}</td>
                       <td className="px-3 py-3 text-muted-foreground" dir="ltr">{m.whatsapp || "—"}</td>
                       <td className="px-3 py-3">
-                        <Badge className={m.role === "tech_admin" ? "bg-rose-100 text-rose-700" : m.role === "club_president" ? "bg-amber-100 text-amber-800" : m.role === "vice_president" ? "bg-yellow-100 text-yellow-800" : m.role === "general_agent" ? "bg-amber-100 text-amber-700" : m.role === "admin" ? "bg-purple-100 text-purple-700" : m.role === "supervisor" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}>
+                        <Badge className={m.role === "tech_admin" ? "bg-rose-100 text-rose-700" : m.role === "club_president" ? "bg-amber-100 text-amber-800" : m.role === "vice_president" ? "bg-yellow-100 text-yellow-800" : m.role === "public_relations_officer" ? "bg-cyan-100 text-cyan-800" : m.role === "admin" ? "bg-purple-100 text-purple-700" : m.role === "supervisor" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}>
                           {roleLabels[m.role] || m.role}
                         </Badge>
                       </td>
@@ -279,8 +275,6 @@ export default function AdminMembers() {
                           <span className="text-xs text-muted-foreground">لا يمكن لغير المدير التقني تعديل المدير التقني</span>
                         ) : (m.role === "club_president" || m.role === "vice_president") && user?.role !== "tech_admin" ? (
                           <span className="text-xs text-muted-foreground">اتخاذ الإجراءات بحق رئيس النادي أو نائبه للمدير التقني فقط</span>
-                        ) : m.role === "general_agent" && user?.role !== "general_agent" && user?.role !== "tech_admin" ? (
-                          <span className="text-xs text-muted-foreground">لا يمكن للمسؤول تعديل الوكيل العام</span>
                         ) : (
                           <div className="flex gap-1">
                             <Button variant="outline" size="sm" onClick={() => setEditingMember(m)}>

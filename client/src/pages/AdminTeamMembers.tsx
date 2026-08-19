@@ -35,7 +35,7 @@ export default function AdminTeamMembers() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAdminTier = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin";
+  const isAdminTier = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "tech_admin";
   if (!user || !isAdminTier) {
     return (
       <div className="container mx-auto px-4 py-12 text-center">

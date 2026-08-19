@@ -53,7 +53,7 @@ export default function AdminActivityRegistrations() {
     onError: (error) => toast.error(error.message),
   });
 
-  if (!user || (user.role !== "admin" && user.role !== "general_agent" && user.role !== "tech_admin" && user.role !== "supervisor")) {
+  if (!user || (user.role !== "admin" && user.role !== "tech_admin" && user.role !== "supervisor")) {
     return <div className="container py-16 text-center" dir="rtl"><p className="text-muted-foreground">غير مصرح لك</p></div>;
   }
 

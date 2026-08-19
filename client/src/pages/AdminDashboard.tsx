@@ -66,7 +66,6 @@ export default function AdminDashboard() {
           </h1>
           <p className="text-lg text-muted-foreground">
             أهلاً بك {user?.name || getRoleLabel(user?.role || "admin")} - لديك جميع الصلاحيات الكاملة
-            {user?.role === "general_agent" && " بالإضافة إلى إدارة حسابات المسؤولين والوكلاء"}
             {user?.role === "tech_admin" && " بالإضافة إلى إدارة حسابات المسؤولين والوكلاء، وترقية الأعضاء إلى مديرين تقنيين، والاطلاع على سجلات العمل"}
           </p>
         </div>
@@ -399,7 +398,9 @@ export default function AdminDashboard() {
 
   switch (user.role) {
     case "admin":
-    case "general_agent":
+    case "club_president":
+    case "vice_president":
+    case "public_relations_officer":
     case "tech_admin":
       return renderAdminDashboard();
     case "supervisor":

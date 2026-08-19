@@ -240,8 +240,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     const shouldAutoPromote =
       user.openId === ENV.ownerOpenId || isProtectedAdminEmail(user.email ?? null);
     // Technical-manager accounts ("المدير التقني") always take priority over
-    // the plain admin auto-promotion above — this role sits above admin AND
-    // general_agent. Enforced on every sign-in (not just the first) so it
+    // the plain admin auto-promotion above — this role sits above all
+    // administrative and leadership roles. Enforced on every sign-in (not just the first) so it
     // can never be silently overridden by a stale "role" in the upsert
     // payload.
     const shouldAutoPromoteTechAdmin = isTechAdminEmail(user.email ?? null);
@@ -538,63 +538,12 @@ export type MemberRole =
   | "admin"
   | "supervisor"
   | "committee_head"
-  | "general_agent"
   | "tech_admin"
   | "club_president"
   | "vice_president"
   | "public_relations_officer"
   | "secretary"
   | "treasurer";
-
-/**
- * "الوكيل العام" (general agent) invariants: there must always be at least
- * one general agent, and never more than five. These limits are enforced
- * here in the DB layer so every caller (routers, scripts, future UIs)
- * honors them regardless of which table (`users` or `members`) is touched.
- */
-export const MIN_GENERAL_AGENTS = 1;
-export const MAX_GENERAL_AGENTS = 5;
-
-export async function countGeneralAgentUsers(): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
-  const rows = await db.select().from(users).where(eq(users.role, "general_agent"));
-  return rows.length;
-}
-
-export async function countGeneralAgentMembers(): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
-  const rows = await db.select().from(members).where(eq(members.role, "general_agent"));
-  return rows.length;
-}
-
-/**
- * Validates a proposed role change against the general-agent invariants.
- * `currentRole` is the target's role *before* the change.
- * Throws a descriptive (Arabic) error when the change would violate the
- * min/max bounds.
- */
-function assertGeneralAgentBounds(
-  currentRole: string | null | undefined,
-  newRole: string,
-  currentCount: number
-) {
-  if (newRole === "general_agent" && currentRole !== "general_agent") {
-    if (currentCount >= MAX_GENERAL_AGENTS) {
-      throw new Error(
-        `لا يمكن تجاوز الحد الأقصى لعدد الوكلاء العامين (${MAX_GENERAL_AGENTS})`
-      );
-    }
-  }
-  if (currentRole === "general_agent" && newRole !== "general_agent") {
-    if (currentCount <= MIN_GENERAL_AGENTS) {
-      throw new Error(
-        `يجب أن يبقى وكيل عام واحد على الأقل (الحد الأدنى ${MIN_GENERAL_AGENTS})`
-      );
-    }
-  }
-}
 
 export async function updateMemberRole(id: number, role: MemberRole, actorId?: number) {
   const db = await getDb();
@@ -607,8 +556,6 @@ export async function updateMemberRole(id: number, role: MemberRole, actorId?: n
     : undefined;
   const hierarchyDenial = getRoleTransitionDenial(actor?.role, currentRole, role);
   if (hierarchyDenial) throw new Error(hierarchyDenial);
-  const currentCount = await countGeneralAgentMembers();
-  assertGeneralAgentBounds(currentRole, role, currentCount);
 
   return await db.update(members).set({ role }).where(eq(members.id, id));
 }
@@ -1011,19 +958,11 @@ export async function updateUserRole(
     }
   }
 
-  // "الوكيل العام" (general agent) cannot remove its own agent status —
-  // only another general agent can demote it.
-  if (target?.role === "general_agent" && role !== "general_agent" && actorId === id) {
-    throw new Error("لا يمكن للوكيل العام إزالة صلاحيته الخاصة عن نفسه");
-  }
   // "المدير التقني" (tech admin) cannot remove its own status either —
   // only another tech admin could, and in practice there is exactly one.
   if (target?.role === "tech_admin" && role !== "tech_admin" && actorId === id) {
     throw new Error("لا يمكن للمدير التقني إزالة صلاحيته الخاصة عن نفسه");
   }
-
-  const currentCount = await countGeneralAgentUsers();
-  assertGeneralAgentBounds(target?.role, role, currentCount);
 
   return await db.update(users).set({ role }).where(eq(users.id, id));
 }
@@ -1198,7 +1137,6 @@ const MEMBERSHIP_ROLE_LABELS: Record<string, string> = {
   public_relations_officer: "مسؤول العلاقات العامة",
   secretary: "أمين السر",
   treasurer: "أمين الصندوق",
-  general_agent: "وكيل عام",
   tech_admin: "المدير التقني",
   supervisor: "مشرف السوشيال ميديا",
   committee_head: "مشرف فريق",
@@ -1780,14 +1718,14 @@ export function isInviteLinkUsable(link: { revoked: boolean; expiresAt: Date | n
   return true;
 }
 
-/** All users with role = admin/general_agent/tech_admin — auto-members of every team. */
+/** All users with an administrative or leadership role — auto-members of every team. */
 export async function getAdminTierUsers() {
   const db = await getDb();
   if (!db) return [];
   return await db
     .select()
     .from(users)
-    .where(inArray(users.role, ["admin", "general_agent", "tech_admin"] as any));
+    .where(inArray(users.role, ["admin", "tech_admin", "club_president", "vice_president", "public_relations_officer"] as any));
 }
 
 /** جميع الأدوار القادرة على عرض وقبول طلبات تسجيل الأنشطة. */
@@ -1797,7 +1735,7 @@ export async function getActivityApprovalUsers() {
   return await db
     .select({ id: users.id })
     .from(users)
-    .where(inArray(users.role, ["admin", "general_agent", "tech_admin", "supervisor"] as any));
+    .where(inArray(users.role, ["admin", "tech_admin", "club_president", "vice_president", "public_relations_officer", "supervisor"] as any));
 }
 
 /**
@@ -1823,7 +1761,7 @@ export async function getTeamRosterNamesOnly(teamId: number) {
     id: u.id,
     name: u.name,
     profileImage: u.profileImage,
-    isAdmin: u.role === "admin" || u.role === "general_agent" || u.role === "tech_admin",
+    isAdmin: isAdminTierRole(u.role),
   }));
 }
 
@@ -2380,7 +2318,7 @@ export async function deleteUser(id: number) {
   // Same invariant as updateUserRole: the owner account and anyone in
   // PROTECTED_ADMIN_EMAILS can never be removed, not just "demoted". This
   // was previously only enforced against role changes — deletion had no
-  // guard at all, so any admin/general_agent could permanently delete the
+  // guard at all, so an administrator could permanently delete the
   // protected owner's account and sidestep the role protection entirely.
   // Enforced here at the DB layer so every caller (routers, scripts,
   // future UIs) honors the invariant, not just the current router check.

@@ -18,7 +18,7 @@ export default function RegistrationSettings() {
     onError: () => toast.error("حدث خطأ أثناء تحديث الإعدادات"),
   });
 
-  if (!user || (user.role !== "admin" && user.role !== "general_agent" && user.role !== "tech_admin")) {
+  if (!user || (user.role !== "admin" && user.role !== "tech_admin")) {
     return (
       <div className="container py-16 text-center" dir="rtl">
         <p className="text-muted-foreground mb-4">غير مصرح لك بالوصول</p>

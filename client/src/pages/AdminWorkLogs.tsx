@@ -143,8 +143,6 @@ function LogRow({
             <Badge variant="outline" className="text-xs">
               {log.actorRole === "tech_admin"
                 ? "المدير التقني"
-                : log.actorRole === "general_agent"
-                ? "وكيل عام"
                 : log.actorRole === "admin"
                 ? "مسؤول"
                 : log.actorRole === "club_president"

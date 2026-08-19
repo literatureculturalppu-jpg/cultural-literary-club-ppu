@@ -34,7 +34,6 @@ const roleOptions: { value: RecipientRole; label: string }[] = [
   { value: "public_relations_officer", label: "مسؤول العلاقات العامة" },
   { value: "vice_president", label: "نائب رئيس النادي" },
   { value: "club_president", label: "رئيس النادي" },
-  { value: "general_agent", label: "الوكيل العام" },
   { value: "admin", label: "المسؤول" },
   { value: "tech_admin", label: "المدير التقني" },
 ];

@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { ShieldAlert, Loader2 } from "lucide-react";
 
-const MODERATOR_ROLES = new Set(["admin", "general_agent", "tech_admin"]);
+const MODERATOR_ROLES = new Set(["admin", "club_president", "vice_president", "public_relations_officer", "tech_admin"]);
 
 export default function MeetingRoom() {
   const { token: inviteToken } = useParams<{ token: string }>();

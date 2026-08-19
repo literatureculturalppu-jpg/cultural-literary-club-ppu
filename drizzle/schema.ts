@@ -6,7 +6,6 @@ export const userRoleEnum = pgEnum("role", [
   "admin",
   "supervisor",
   "committee_head",
-  "general_agent",
   "tech_admin",
   "club_president",
   "vice_president",
@@ -29,7 +28,7 @@ export const teamActionTypeEnum = pgEnum("team_action_type", [
   "set_chat_open",
 ]);
 // "elevated" entries are actions taken by anyone above the plain "user" role
-// (admin/supervisor/committee_head/general_agent/tech_admin) — content
+// (admin/supervisor/committee_head/tech_admin) — content
 // publishing, approvals, role changes, logins, etc. "member" entries are the
 // ordinary activity of any signed-in member (regular or elevated alike),
 // such as chatting with Basir or registering for an activity.

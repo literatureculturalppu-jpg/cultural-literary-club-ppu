@@ -20,7 +20,7 @@ export default function AdminTeams() {
   const [description, setDescription] = useState("");
   const [headReferenceNumber, setHeadReferenceNumber] = useState("");
 
-  const isAdminTier = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "general_agent" || user?.role === "tech_admin";
+  const isAdminTier = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "tech_admin";
 
   const { data: teams, isLoading } = trpc.teams.listAdmin.useQuery(undefined, {
     enabled: isAdminTier,

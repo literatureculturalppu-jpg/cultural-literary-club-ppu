@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowRight, Video, Calendar, Copy, Ban, ShieldCheck, X, UserPlus, Pencil, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 
-const MODERATOR_ROLES = new Set(["admin", "general_agent", "tech_admin"]);
+const MODERATOR_ROLES = new Set(["admin", "club_president", "vice_president", "public_relations_officer", "tech_admin"]);
 
 type GuestJoinRequest = {
   id: number;

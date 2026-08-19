@@ -10,7 +10,7 @@ const YEAR_LABELS: Record<string, string> = {
   first: "الأولى", second: "الثانية", third: "الثالثة", fourth: "الرابعة", postgraduate: "دراسات عليا",
 };
 
-const ADMIN_ROLES = new Set(["admin", "general_agent", "tech_admin"]);
+const ADMIN_ROLES = new Set(["admin", "club_president", "vice_president", "public_relations_officer", "tech_admin"]);
 
 export default function MembershipCardVerify() {
   const { token = "" } = useParams<{ token: string }>();
@@ -42,7 +42,7 @@ export default function MembershipCardVerify() {
       <div className="container mx-auto max-w-lg px-4 py-16 text-center" dir="rtl">
         <ShieldAlert className="mx-auto h-11 w-11 text-rose-600" />
         <h1 className="mt-4 text-2xl font-bold">لا تملك صلاحية التحقق</h1>
-        <p className="mt-2 text-muted-foreground">هذه الصفحة متاحة للمسؤول والوكيل العام والمدير التقني فقط.</p>
+        <p className="mt-2 text-muted-foreground">هذه الصفحة متاحة للمناصب الإدارية المخولة فقط.</p>
       </div>
     );
   }

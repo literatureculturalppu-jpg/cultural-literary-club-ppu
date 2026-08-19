@@ -15,7 +15,7 @@ import {
 
 const inputClass = "w-full px-4 py-2 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent text-sm";
 
-const isAdminRole = (role?: string) => role === "admin" || role === "club_president" || role === "vice_president" || role === "public_relations_officer" || role === "general_agent" || role === "tech_admin";
+const isAdminRole = (role?: string) => role === "admin" || role === "club_president" || role === "vice_president" || role === "public_relations_officer" || role === "tech_admin";
 
 // ─── معالجة صورة غلاف الكتاب قبل الرفع ─────────────────────────────────────
 async function processCoverImage(dataUrl: string): Promise<string> {

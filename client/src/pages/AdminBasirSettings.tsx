@@ -16,7 +16,6 @@ const roleLabels: Record<string, string> = {
   public_relations_officer: "مسؤول العلاقات العامة",
   secretary: "أمين السر",
   treasurer: "أمين الصندوق",
-  general_agent: "وكيل عام",
   tech_admin: "المدير التقني",
   supervisor: "مشرف السوشيال ميديا",
   committee_head: "مشرف فريق",
@@ -52,7 +51,7 @@ export default function AdminBasirSettings() {
     },
   });
 
-  if (!user || (user.role !== "admin" && user.role !== "general_agent" && user.role !== "tech_admin")) {
+  if (!user || (user.role !== "admin" && user.role !== "tech_admin")) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -317,7 +316,7 @@ export default function AdminBasirSettings() {
                                 className={
                                   s.role === "tech_admin"
                                     ? "bg-rose-100 text-rose-700"
-                                    : s.role === "general_agent"
+                                    : s.role === "club_president"
                                     ? "bg-amber-100 text-amber-700"
                                     : s.role === "admin"
                                       ? "bg-purple-100 text-purple-700"
