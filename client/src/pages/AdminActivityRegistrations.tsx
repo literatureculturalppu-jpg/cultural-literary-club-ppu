@@ -19,7 +19,7 @@ export default function AdminActivityRegistrations() {
   const activityId = parseInt(params.id || "0");
 
   const { data: activity } = trpc.activities.getById.useQuery(activityId);
-  const { data: registrations, isLoading, isFetching, refetch } = trpc.activityRegistrations.getForActivity.useQuery(activityId, {
+  const { data: registrations, isLoading, isFetching, error: registrationsError, refetch } = trpc.activityRegistrations.getForActivity.useQuery(activityId, {
     // بيانات القبول خاصة، لذلك لا تُخزّن في كاش عام. يعيد الاستعلام الجلب
     // بانتظام ليظهر الطلب الجديد حتى عندما تبقى صفحة الإدارة مفتوحة.
     staleTime: 0,
@@ -63,7 +63,15 @@ export default function AdminActivityRegistrations() {
 
       <section className="py-12 bg-background">
         <div className="container space-y-10">
-          {isLoading ? <p className="text-center text-muted-foreground">جاري التحميل...</p> : (
+          {isLoading ? <p className="text-center text-muted-foreground">جاري التحميل...</p> : registrationsError ? (
+            <Card className="p-8 text-center border-destructive/30">
+              <p className="font-semibold text-destructive">تعذر تحميل طلبات التسجيل</p>
+              <p className="text-sm text-muted-foreground mt-2">{registrationsError.message}</p>
+              <Button variant="outline" className="mt-4" onClick={() => void refetch()} disabled={isFetching}>
+                {isFetching ? "جاري التحديث..." : "إعادة المحاولة"}
+              </Button>
+            </Card>
+          ) : (
             <>
               {/* أعضاء */}
               <div>

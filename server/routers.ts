@@ -3094,11 +3094,28 @@ export const appRouter = router({
     getForActivity: activityApproverProcedure
       .input(z.number())
       .query(async ({ input }) => {
-        const [members, guests] = await Promise.all([
-          getActivitySubscribersWithUsers(input),
-          getGuestRegistrationsByActivity(input),
-        ]);
-        return { members, guests };
+        try {
+          const [members, guests] = await Promise.all([
+            getActivitySubscribersWithUsers(input),
+            getGuestRegistrationsByActivity(input),
+          ]);
+          console.info("[activityRegistrations.getForActivity] loaded", {
+            activityId: input,
+            memberCount: members.length,
+            guestCount: guests.length,
+          });
+          return { members, guests };
+        } catch (error) {
+          console.error("[activityRegistrations.getForActivity] failed", {
+            activityId: input,
+            error,
+          });
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "تعذر تحميل طلبات التسجيل لهذا النشاط. حاول التحديث مرة أخرى.",
+            cause: error,
+          });
+        }
       }),
 
     approveSubscription: activityApproverProcedure
