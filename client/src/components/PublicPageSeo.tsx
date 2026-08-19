@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 
 const SITE_ORIGIN = "https://cultural-literary-club-ppu.vercel.app";
-const CLUB_SHARE_IMAGE = `${SITE_ORIGIN}/club-icon-512.png`;
+const CLUB_SHARE_IMAGE = `${SITE_ORIGIN}/club-share-card-1200x630.png?v=1`;
 
 type PublicPageMeta = {
   title: string;
