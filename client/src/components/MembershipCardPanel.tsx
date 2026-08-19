@@ -97,8 +97,6 @@ function Value({ label, value }: { label: string; value?: string | null }) {
 export default function MembershipCardPanel() {
   const { data, isLoading, error } = trpc.membershipCards.mine.useQuery();
   const exportCardRef = useRef<HTMLDivElement>(null);
-  const exportCardSurfaceRef = useRef<HTMLDivElement>(null);
-  const visibleCardRef = useRef<HTMLElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
@@ -148,14 +146,9 @@ export default function MembershipCardPanel() {
     if (!exportCardRef.current || !exportFormat) return;
     setIsExporting(true);
     try {
-      const visibleCardBounds = visibleCardRef.current?.getBoundingClientRect();
-      if (visibleCardBounds && exportCardSurfaceRef.current) {
-        exportCardSurfaceRef.current.style.width = `${Math.round(visibleCardBounds.width)}px`;
-        exportCardSurfaceRef.current.style.height = `${Math.round(visibleCardBounds.height)}px`;
-      }
       const canvas = await html2canvas(exportCardRef.current, {
         backgroundColor: "#FFFFFF",
-        scale: 2,
+        scale: 1,
         useCORS: true,
         logging: false,
         onclone: (clonedDocument) => {
@@ -234,7 +227,7 @@ export default function MembershipCardPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6 p-4 sm:p-6">
-        <section ref={visibleCardRef} className="overflow-hidden rounded-2xl border border-amber-400/70 bg-black text-white shadow-xl">
+        <section className="overflow-hidden rounded-2xl border border-amber-400/70 bg-black text-white shadow-xl">
           <div className="relative min-h-[330px] bg-[radial-gradient(circle_at_20%_0%,rgba(217,161,59,0.26),transparent_36%),radial-gradient(circle_at_100%_100%,rgba(217,161,59,0.16),transparent_38%)] p-5 sm:p-7">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-amber-300 via-amber-500 to-amber-300" />
             <div className="flex items-start justify-between gap-4" dir="ltr">
@@ -443,55 +436,48 @@ export default function MembershipCardPanel() {
         position: "fixed",
         left: "-10000px",
         top: 0,
-        display: "inline-block",
+        width: 1224,
+        height: 1207,
         boxSizing: "border-box",
-        padding: 16,
+        padding: "50px 108px 33px",
         overflow: "hidden",
         backgroundColor: "#FFFFFF",
         fontFamily: "Tajawal, Arial, sans-serif",
       }}
     >
-      <div ref={exportCardSurfaceRef} style={{ position: "relative", boxSizing: "border-box", width: 720, height: 330, overflow: "hidden", borderRadius: 16, border: "1px solid #FBBF24", backgroundColor: "#000000", color: "#FFFFFF", padding: 28, backgroundImage: "radial-gradient(circle at 20% 0%, rgba(217,161,59,0.26), transparent 36%), radial-gradient(circle at 100% 100%, rgba(217,161,59,0.16), transparent 38%)" }}>
-        <div style={{ position: "absolute", top: 0, right: 0, left: 0, height: 4, backgroundImage: "linear-gradient(to left, #FCD34D, #F59E0B, #FCD34D)" }} />
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }} dir="ltr">
-          <img src="/club-icon-192.png" alt="" style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 12, border: "1px solid rgba(252,211,77,0.6)", backgroundColor: "#000000", objectFit: "contain", padding: 4 }} />
-          <div style={{ textAlign: "right" }} dir="rtl">
-            <div style={{ color: "#FDE68A", fontSize: 12 }}>جامعة بوليتكنك فلسطين</div>
-            <div style={{ marginTop: 4, color: "#FFFFFF", fontSize: 20, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
-            <div style={{ marginTop: 4, color: "rgba(255,255,255,0.75)", fontSize: 14 }}>بطاقة عضوية رقمية</div>
-          </div>
+      <div style={{ position: "relative", boxSizing: "border-box", width: 1008, height: 1124, overflow: "hidden", borderRadius: 48, border: "2px solid #FBBF24", backgroundColor: "#000000", color: "#FFFFFF", backgroundImage: "radial-gradient(circle at 20% 0%, rgba(217,161,59,0.26), transparent 36%), radial-gradient(circle at 100% 100%, rgba(217,161,59,0.16), transparent 38%)" }}>
+        <div style={{ position: "absolute", top: 0, right: 0, left: 0, height: 14, backgroundImage: "linear-gradient(to left, #FCD34D, #F59E0B, #FCD34D)" }} />
+        <img src="/club-icon-192.png" alt="" style={{ position: "absolute", top: 66, left: 66, width: 178, height: 178, boxSizing: "border-box", borderRadius: 34, border: "2px solid rgba(252,211,77,0.6)", backgroundColor: "#000000", objectFit: "contain", padding: 12 }} />
+        <div style={{ position: "absolute", top: 72, right: 70, textAlign: "right" }} dir="rtl">
+          <div style={{ color: "#FDE68A", fontSize: 28 }}>جامعة بوليتكنك فلسطين</div>
+          <div style={{ marginTop: 22, color: "#FFFFFF", fontSize: 52, lineHeight: 1.2, fontWeight: 700 }}>النادي الثقافي الأدبي</div>
+          <div style={{ marginTop: 22, color: "rgba(255,255,255,0.75)", fontSize: 32 }}>بطاقة عضوية رقمية</div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 28 }} dir="ltr">
-          <div style={{ width: 64, height: 64, flexShrink: 0, overflow: "hidden", borderRadius: "50%", border: "2px solid rgba(252,211,77,0.8)", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {localPhotoUrl || member.profileImage ? (
-              <img src={localPhotoUrl || member.profileImage || undefined} crossOrigin="anonymous" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
-            ) : (
-              <span style={{ color: "#FDE68A", fontSize: 30, fontWeight: 700 }}>{(member.arabicFullName || member.name || "ع").trim().charAt(0)}</span>
-            )}
-          </div>
-          <div style={{ minWidth: 0, textAlign: "right" }} dir="rtl">
-            <div style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 20, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
-            <div style={{ marginTop: 4, color: "#FDE68A", fontSize: 14 }}>{member.roleLabel}</div>
-            <div style={{ marginTop: 4, color: "rgba(255,255,255,0.7)", fontFamily: "monospace", fontSize: 12, letterSpacing: "0.2em" }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 20, marginTop: 24 }} dir="ltr">
-          <div style={{ textAlign: "right" }} dir="rtl">
-            <div style={{ display: "inline-block", border: `1px solid ${member.approvalStatus === "approved" ? "#A7F3D0" : member.approvalStatus === "rejected" ? "#FECDD3" : "#FDE68A"}`, borderRadius: 999, padding: "5px 10px", backgroundColor: member.approvalStatus === "approved" ? "#D1FAE5" : member.approvalStatus === "rejected" ? "#FFE4E6" : "#FEF3C7", color: member.approvalStatus === "approved" ? "#065F46" : member.approvalStatus === "rejected" ? "#9F1239" : "#92400E", fontSize: 12, fontWeight: 700 }}>{status.label}</div>
-            {positions.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "flex-start", gap: 8, marginTop: 16 }}>
-                {positions.slice(0, 2).map((position) => <span key={position} style={{ border: "1px solid rgba(253,230,138,0.35)", borderRadius: 999, padding: "4px 10px", backgroundColor: "rgba(255,255,255,0.1)", color: "#FEF3C7", fontSize: 12 }}>{position}</span>)}
-              </div>
-            ) : null}
-          </div>
-          {canVerify ? (
-            <div style={{ borderRadius: 12, backgroundColor: "#FFFFFF", padding: 8 }}><QRCodeSVG value={qrUrl!} size={112} level="M" includeMargin={false} fgColor="#111111" bgColor="#FFFFFF" /></div>
+        <div style={{ position: "absolute", top: 408, left: 66, width: 202, height: 202, overflow: "hidden", borderRadius: "50%", border: "4px solid rgba(252,211,77,0.8)", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {localPhotoUrl || member.profileImage ? (
+            <img src={localPhotoUrl || member.profileImage || undefined} crossOrigin="anonymous" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", transform: `translate(${photoOffset.x}%, ${photoOffset.y}%) scale(${photoScale})` }} />
           ) : (
-            <div style={{ width: 108, height: 108, borderRadius: 12, border: "1px solid rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, color: "rgba(255,255,255,0.75)", fontSize: 12, textAlign: "center" }} dir="rtl">يصدر رمز التحقق بعد اعتماد العضوية</div>
+            <span style={{ color: "#FDE68A", fontSize: 86, fontWeight: 700 }}>{(member.arabicFullName || member.name || "ع").trim().charAt(0)}</span>
           )}
         </div>
+        <div style={{ position: "absolute", top: 408, right: 70, width: 590, textAlign: "right" }} dir="rtl">
+          <div style={{ overflow: "hidden", color: "#FFFFFF", fontSize: 50, lineHeight: 1.22, fontWeight: 700, whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{member.arabicFullName || member.name || "عضو النادي"}</div>
+          <div style={{ marginTop: 22, color: "#FDE68A", fontSize: 30 }}>{member.roleLabel}</div>
+          <div style={{ marginTop: 14, color: "rgba(255,255,255,0.7)", fontFamily: "monospace", fontSize: 24, letterSpacing: "0.22em" }} dir="ltr">{member.referenceNumber ? `ID ${member.referenceNumber}` : "ID PENDING"}</div>
+        </div>
+
+        <div style={{ position: "absolute", left: 150, top: 796, textAlign: "right" }} dir="rtl">
+          <div style={{ display: "inline-block", border: `2px solid ${member.approvalStatus === "approved" ? "#A7F3D0" : member.approvalStatus === "rejected" ? "#FECDD3" : "#FDE68A"}`, borderRadius: 999, padding: "16px 30px", backgroundColor: member.approvalStatus === "approved" ? "#D1FAE5" : member.approvalStatus === "rejected" ? "#FFE4E6" : "#FEF3C7", color: member.approvalStatus === "approved" ? "#065F46" : member.approvalStatus === "rejected" ? "#9F1239" : "#92400E", fontSize: 26, fontWeight: 700 }}>{status.label}</div>
+        </div>
+        {positions.length > 0 ? (
+          <div style={{ position: "absolute", left: 66, bottom: 64, width: 438, minHeight: 126, boxSizing: "border-box", border: "2px solid rgba(253,230,138,0.35)", borderRadius: 999, padding: "22px 30px", backgroundColor: "rgba(255,255,255,0.1)", color: "#FEF3C7", fontSize: 30, lineHeight: 1.2, textAlign: "center" }} dir="rtl">{positions.slice(0, 2).join(" • ")}</div>
+        ) : null}
+        {canVerify ? (
+          <div style={{ position: "absolute", right: 66, bottom: 64, borderRadius: 34, backgroundColor: "#FFFFFF", padding: 24 }}><QRCodeSVG value={qrUrl!} size={260} level="M" includeMargin={false} fgColor="#111111" bgColor="#FFFFFF" /></div>
+        ) : (
+          <div style={{ position: "absolute", right: 66, bottom: 64, width: 338, height: 350, boxSizing: "border-box", borderRadius: 34, border: "2px solid rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24, padding: 32, color: "rgba(255,255,255,0.75)", fontSize: 28, lineHeight: 1.55, textAlign: "center" }} dir="rtl"><LockKeyhole size={58} color="#FDE68A" />يصدر رمز التحقق بعد اعتماد العضوية</div>
+        )}
       </div>
     </div>
     </>
