@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { UserRound, Clock, XCircle, UsersRound } from "lucide-react";
+import { UserRound, Clock, XCircle, UsersRound, CalendarDays, IdCard } from "lucide-react";
 import { Link } from "wouter";
 import MembershipCardPanel from "@/components/MembershipCardPanel";
 import { PersonalActivityCalendar } from "@/components/PersonalActivityCalendar";
@@ -56,9 +56,12 @@ type EditableFormState = {
   culturalExperience: string;
 };
 
+type ProfileSection = "membership" | "account" | "teams" | "calendar";
+
 export default function Profile() {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [activeSection, setActiveSection] = useState<ProfileSection | null>(null);
 
   const buildFormState = (): EditableFormState => ({
     name: user?.name || "",
@@ -89,11 +92,11 @@ export default function Profile() {
     enabled: Boolean(user),
   });
   const { data: myTeams, isLoading: teamsLoading } = trpc.users.getMyTeams.useQuery(undefined, {
-    enabled: Boolean(user),
+    enabled: Boolean(user) && activeSection === "teams",
   });
   const { data: mySubscriptions, isLoading: subscriptionsLoading } = trpc.users.getMyActivitySubscriptions.useQuery(
     undefined,
-    { enabled: Boolean(user) }
+    { enabled: Boolean(user) && activeSection === "calendar" }
   );
 
   const createRequest = trpc.profileEditRequests.create.useMutation({
@@ -189,9 +192,36 @@ export default function Profile() {
           </Alert>
         )}
 
-        <MembershipCardPanel />
+        <Card className="border-accent/25 bg-accent/[0.03]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-right">أقسام ملفي الشخصي</CardTitle>
+            <p className="text-sm text-muted-foreground text-right">اختر القسم الذي تريد عرضه.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Button type="button" onClick={() => setActiveSection("membership")} variant={activeSection === "membership" ? "default" : "outline"} className="h-auto min-h-20 flex-col gap-2 whitespace-normal">
+                <IdCard className="w-5 h-5" />
+                بطاقة العضوية
+              </Button>
+              <Button type="button" onClick={() => setActiveSection("account")} variant={activeSection === "account" ? "default" : "outline"} className="h-auto min-h-20 flex-col gap-2 whitespace-normal">
+                <UserRound className="w-5 h-5" />
+                معلومات الحساب
+              </Button>
+              <Button type="button" onClick={() => setActiveSection("teams")} variant={activeSection === "teams" ? "default" : "outline"} className="h-auto min-h-20 flex-col gap-2 whitespace-normal">
+                <UsersRound className="w-5 h-5" />
+                فرقي
+              </Button>
+              <Button type="button" onClick={() => setActiveSection("calendar")} variant={activeSection === "calendar" ? "default" : "outline"} className="h-auto min-h-20 flex-col gap-2 whitespace-normal">
+                <CalendarDays className="w-5 h-5" />
+                تقويمي
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-        <Card>
+        {activeSection === "membership" && <MembershipCardPanel />}
+
+        {activeSection === "account" && <Card>
           <CardHeader>
             <CardTitle className="text-right">معلومات الحساب</CardTitle>
           </CardHeader>
@@ -359,10 +389,10 @@ export default function Profile() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* Teams */}
-        <Card>
+        {activeSection === "teams" && <Card>
           <CardHeader>
             <CardTitle className="text-right flex items-center gap-2 justify-end">
               الفرق التي أنتمي إليها
@@ -389,9 +419,11 @@ export default function Profile() {
               <p className="text-muted-foreground text-right">أنت لست منضماً إلى أي فريق حالياً</p>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
-        <PersonalActivityCalendar registrations={mySubscriptions ?? []} isLoading={subscriptionsLoading} />
+        {activeSection === "calendar" && <PersonalActivityCalendar registrations={mySubscriptions ?? []} isLoading={subscriptionsLoading} />}
+
+        {!activeSection && <p className="text-center text-sm text-muted-foreground py-4">اضغط على أحد الأزرار أعلاه لعرض محتواه.</p>}
       </div>
     </div>
   );
