@@ -109,8 +109,8 @@ export default function Navigation() {
                   </Link>
                 )}
                 {!onboardingPending && <NotificationBell />}
-                {!onboardingPending && (isAdminTierRole(user?.role) || user?.role === "supervisor" || user?.role === "committee_head") && (
-                  <Link href="/admin">
+                {!onboardingPending && (isAdminTierRole(user?.role) || user?.role === "supervisor" || user?.role === "committee_head" || user?.role === "treasurer") && (
+                  <Link href={user?.role === "treasurer" ? "/treasury" : "/admin"}>
                     <Button variant="outline" className="hidden sm:inline-flex">
                       لوحة التحكم
                     </Button>
@@ -185,8 +185,8 @@ export default function Navigation() {
                       </Button>
                     </Link>
                   )}
-                  {!onboardingPending && (isAdminTierRole(user?.role) || user?.role === "supervisor" || user?.role === "committee_head") && (
-                    <Link href="/admin">
+                  {!onboardingPending && (isAdminTierRole(user?.role) || user?.role === "supervisor" || user?.role === "committee_head" || user?.role === "treasurer") && (
+                    <Link href={user?.role === "treasurer" ? "/treasury" : "/admin"}>
                       <Button
                         variant="outline"
                         className="w-full justify-start"

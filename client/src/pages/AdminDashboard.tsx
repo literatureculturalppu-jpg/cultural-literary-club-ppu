@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bell, Bot, UsersRound, UserCog, FileEdit, FileClock, Video } from "lucide-react";
+import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bell, Bot, UsersRound, UserCog, FileEdit, FileClock, Video, WalletCards } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useEffect } from "react";
-import { isAdminTierRole, ROLE_LABELS } from "@shared/clubRoles";
+import { canAccessTreasury, isAdminTierRole, ROLE_LABELS } from "@shared/clubRoles";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -241,6 +241,14 @@ export default function AdminDashboard() {
                   نظام الاجتماعات الإلكتروني
                 </Button>
               </Link>
+              {canAccessTreasury(user?.role) && (
+                <Link href="/treasury">
+                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50">
+                    <WalletCards className="w-4 h-4" />
+                    لوحة أمين الصندوق
+                  </Button>
+                </Link>
+              )}
               {isAdminTier && (
                 <>
                   <Link href="/admin/notifications">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRoleTransitionDenial, isAdminTierRole } from "../shared/clubRoles.js";
+import { canAccessTreasury, canApproveTreasury, getRoleTransitionDenial, isAdminTierRole } from "../shared/clubRoles.js";
 
 describe("club leadership role policy", () => {
   it("grants every executive administrative role the general admin tier", () => {
@@ -22,5 +22,23 @@ describe("club leadership role policy", () => {
     expect(getRoleTransitionDenial("admin", "user", "club_president")).toContain("المدير التقني");
     expect(getRoleTransitionDenial("club_president", "user", "vice_president")).toContain("المدير التقني");
     expect(getRoleTransitionDenial("tech_admin", "user", "vice_president")).toBeNull();
+  });
+
+  it("grants treasury visibility to the treasurer and explicitly authorized leadership roles", () => {
+    expect(canAccessTreasury("treasurer")).toBe(true);
+    expect(canAccessTreasury("tech_admin")).toBe(true);
+    expect(canAccessTreasury("club_president")).toBe(true);
+    expect(canAccessTreasury("vice_president")).toBe(true);
+    expect(canAccessTreasury("public_relations_officer")).toBe(true);
+    expect(canAccessTreasury("secretary")).toBe(false);
+    expect(canAccessTreasury("admin")).toBe(false);
+  });
+
+  it("keeps financial approval outside the public-relations view-only role", () => {
+    expect(canApproveTreasury("tech_admin")).toBe(true);
+    expect(canApproveTreasury("club_president")).toBe(true);
+    expect(canApproveTreasury("vice_president")).toBe(true);
+    expect(canApproveTreasury("public_relations_officer")).toBe(false);
+    expect(canApproveTreasury("treasurer")).toBe(false);
   });
 });

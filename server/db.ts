@@ -68,6 +68,12 @@ import {
   mobileDevices,
   mobileAuthCodes,
   membershipCards,
+  financialBudgetCategories,
+  financialTransactions,
+  financialReceipts,
+  financialAuditLogs,
+  type InsertFinancialBudgetCategory,
+  type InsertFinancialTransaction,
 } from "../drizzle/schema.js";
 import { ENV, isProtectedAdminEmail, isTechAdminEmail } from './_core/env.js';
 
@@ -3148,4 +3154,181 @@ export async function runScheduledWorkLogsCleanup() {
     await db.delete(workLogs).where(eq(workLogs.id, row.id));
   }
   return { deletedCount: expired.length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Treasury — a separate, append-audited workspace. Values use integer cents
+// to retain exact totals and avoid floating-point rounding in reports.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type FinancialTransactionStatus = "draft" | "pending_approval" | "approved" | "returned" | "void";
+export type FinancialTransactionType = "income" | "expense";
+
+export async function listFinancialBudgetCategories(fiscalYear: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(financialBudgetCategories)
+    .where(eq(financialBudgetCategories.fiscalYear, fiscalYear))
+    .orderBy(financialBudgetCategories.title);
+}
+
+export async function createFinancialBudgetCategory(input: Omit<InsertFinancialBudgetCategory, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.insert(financialBudgetCategories).values(input).returning();
+  return row;
+}
+
+export async function updateFinancialBudgetCategory(id: number, input: Pick<InsertFinancialBudgetCategory, "title" | "allocatedAmountCents" | "notes" | "currency">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.update(financialBudgetCategories).set(input).where(eq(financialBudgetCategories.id, id)).returning();
+  return row ?? null;
+}
+
+export async function createFinancialTransaction(input: Omit<InsertFinancialTransaction, "id" | "status" | "submittedAt" | "reviewedBy" | "reviewedAt" | "reviewNote" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.insert(financialTransactions).values({ ...input, status: "draft" }).returning();
+  return row;
+}
+
+export async function updateFinancialTransactionDraft(
+  id: number,
+  actorId: number,
+  input: Pick<InsertFinancialTransaction, "categoryId" | "type" | "title" | "description" | "amountCents" | "currency" | "transactionDate">,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.update(financialTransactions).set(input)
+    .where(and(eq(financialTransactions.id, id), eq(financialTransactions.createdBy, actorId), inArray(financialTransactions.status, ["draft", "returned"])))
+    .returning();
+  return row ?? null;
+}
+
+export async function submitFinancialTransaction(id: number, actorId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.update(financialTransactions).set({
+    status: "pending_approval",
+    submittedAt: new Date(),
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewNote: null,
+  }).where(and(eq(financialTransactions.id, id), eq(financialTransactions.createdBy, actorId), inArray(financialTransactions.status, ["draft", "returned"]))).returning();
+  return row ?? null;
+}
+
+export async function reviewFinancialTransaction(id: number, reviewerId: number, decision: "approved" | "returned" | "void", reviewNote: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.update(financialTransactions).set({
+    status: decision,
+    reviewedBy: reviewerId,
+    reviewedAt: new Date(),
+    reviewNote,
+  }).where(and(eq(financialTransactions.id, id), eq(financialTransactions.status, "pending_approval"))).returning();
+  return row ?? null;
+}
+
+export async function addFinancialReceipt(input: { transactionId: number; fileUrl: string; fileKey: string; fileName: string; createdBy: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db.insert(financialReceipts).values(input).returning();
+  return row;
+}
+
+export async function getFinancialTransactionOwner(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select({ id: financialTransactions.id, createdBy: financialTransactions.createdBy, status: financialTransactions.status })
+    .from(financialTransactions).where(eq(financialTransactions.id, id)).limit(1);
+  return row ?? null;
+}
+
+export async function writeFinancialAuditLog(input: { transactionId?: number | null; actorId: number; action: string; summary: string }) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(financialAuditLogs).values({
+    transactionId: input.transactionId ?? null,
+    actorId: input.actorId,
+    action: input.action,
+    summary: input.summary,
+  });
+}
+
+export async function listFinancialAuditLogs(transactionId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const query = db.select({
+    id: financialAuditLogs.id,
+    transactionId: financialAuditLogs.transactionId,
+    action: financialAuditLogs.action,
+    summary: financialAuditLogs.summary,
+    createdAt: financialAuditLogs.createdAt,
+    actorName: users.name,
+  }).from(financialAuditLogs).leftJoin(users, eq(financialAuditLogs.actorId, users.id)).orderBy(desc(financialAuditLogs.createdAt)).limit(200);
+  return transactionId ? query.where(eq(financialAuditLogs.transactionId, transactionId)) : query;
+}
+
+export async function listFinancialTransactions(filters: { fiscalYear?: number; status?: FinancialTransactionStatus } = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters.status) conditions.push(eq(financialTransactions.status, filters.status));
+  if (filters.fiscalYear) conditions.push(sql`EXTRACT(YEAR FROM ${financialTransactions.transactionDate}) = ${filters.fiscalYear}`);
+  const query = db.select({
+    id: financialTransactions.id,
+    categoryId: financialTransactions.categoryId,
+    categoryTitle: financialBudgetCategories.title,
+    type: financialTransactions.type,
+    status: financialTransactions.status,
+    title: financialTransactions.title,
+    description: financialTransactions.description,
+    amountCents: financialTransactions.amountCents,
+    currency: financialTransactions.currency,
+    transactionDate: financialTransactions.transactionDate,
+    createdBy: financialTransactions.createdBy,
+    submittedAt: financialTransactions.submittedAt,
+    reviewedBy: financialTransactions.reviewedBy,
+    reviewedAt: financialTransactions.reviewedAt,
+    reviewNote: financialTransactions.reviewNote,
+    createdAt: financialTransactions.createdAt,
+    creatorName: users.name,
+  }).from(financialTransactions)
+    .leftJoin(financialBudgetCategories, eq(financialTransactions.categoryId, financialBudgetCategories.id))
+    .leftJoin(users, eq(financialTransactions.createdBy, users.id))
+    .orderBy(desc(financialTransactions.transactionDate), desc(financialTransactions.id)).limit(300);
+  const rows = conditions.length ? await query.where(and(...conditions)) : await query;
+  if (!rows.length) return [];
+  const receipts = await db.select().from(financialReceipts).where(inArray(financialReceipts.transactionId, rows.map((row) => row.id)));
+  return rows.map((row) => ({ ...row, receipts: receipts.filter((receipt) => receipt.transactionId === row.id) }));
+}
+
+export async function getTreasurySummary(fiscalYear: number, includeTransactions = true) {
+  const [categories, transactions] = await Promise.all([
+    listFinancialBudgetCategories(fiscalYear),
+    listFinancialTransactions({ fiscalYear }),
+  ]);
+  const approved = transactions.filter((transaction) => transaction.status === "approved");
+  const incomeCents = approved.filter((transaction) => transaction.type === "income").reduce((sum, transaction) => sum + transaction.amountCents, 0);
+  const expenseCents = approved.filter((transaction) => transaction.type === "expense").reduce((sum, transaction) => sum + transaction.amountCents, 0);
+  const allocatedCents = categories.reduce((sum, category) => sum + category.allocatedAmountCents, 0);
+  const approvedExpenseByCategory = approved
+    .filter((transaction) => transaction.type === "expense" && transaction.categoryId)
+    .reduce<Record<number, number>>((totals, transaction) => {
+      const categoryId = transaction.categoryId as number;
+      totals[categoryId] = (totals[categoryId] ?? 0) + transaction.amountCents;
+      return totals;
+    }, {});
+  return {
+    categories,
+    transactions: includeTransactions ? transactions : [],
+    approvedExpenseByCategory,
+    incomeCents,
+    expenseCents,
+    balanceCents: incomeCents - expenseCents,
+    allocatedCents,
+    pendingCount: transactions.filter((transaction) => transaction.status === "pending_approval").length,
+  };
 }

@@ -22,6 +22,7 @@ const Activities = lazy(preloadActivities);
 const Articles = lazy(() => import("./pages/Articles"));
 const Achievements = lazy(() => import("./pages/Achievements"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const TreasuryDashboard = lazy(() => import("./pages/TreasuryDashboard"));
 const PendingApproval = lazy(() => import("./pages/PendingApproval"));
 const PendingApprovalRoute = () => <PendingApproval />;
 const AdminActivities = lazy(() => import("./pages/AdminActivities"));
@@ -99,6 +100,7 @@ function Router() {
         <Route path={"/articles"} component={Articles} />
         <Route path={"/achievements"} component={Achievements} />
         <Route path={"/admin"} component={AdminDashboard} />
+        <Route path={"/treasury"} component={TreasuryDashboard} />
         <Route path={"/admin/activities"} component={AdminActivities} />
         <Route path={"/admin/articles"} component={AdminArticles} />
         <Route path={"/admin/members"} component={AdminMembers} />

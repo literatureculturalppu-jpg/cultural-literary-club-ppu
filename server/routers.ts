@@ -1,9 +1,9 @@
  import { COOKIE_NAME } from "../shared/const.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
-import { activityApproverProcedure, publicProcedure, router, protectedProcedure } from "./_core/trpc.js";
+import { activityApproverProcedure, publicProcedure, router, protectedProcedure, treasuryProcedure } from "./_core/trpc.js";
 import { TRPCError } from "@trpc/server";
-import { CLUB_ROLES, getRoleTransitionDenial, isAdminTierRole, ROLE_LABELS } from "../shared/clubRoles.js";
+import { canApproveTreasury, CLUB_ROLES, getRoleTransitionDenial, isAdminTierRole, ROLE_LABELS } from "../shared/clubRoles.js";
 
 import { z } from "zod";
 import {
@@ -172,6 +172,19 @@ import {
   cancelWorkLogDeletionMany,
   getMyMembershipCard,
   verifyMembershipCard,
+  addFinancialReceipt,
+  createFinancialBudgetCategory,
+  createFinancialTransaction,
+  getFinancialTransactionOwner,
+  getTreasurySummary,
+  listFinancialAuditLogs,
+  listFinancialBudgetCategories,
+  listFinancialTransactions,
+  reviewFinancialTransaction,
+  submitFinancialTransaction,
+  updateFinancialBudgetCategory,
+  updateFinancialTransactionDraft,
+  writeFinancialAuditLog,
 } from "./db.js";
 import { notifyOwner } from "./_core/notification.js";
 import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
@@ -3470,6 +3483,118 @@ export const appRouter = router({
           metadata: { previousReferenceNumber, newReferenceNumber: input.referenceNumber },
         });
         return { success: true };
+      }),
+  }),
+
+  // ── أمين الصندوق — مساحة مالية مستقلة ومحدودة الصلاحيات ──────────────────
+  treasury: router({
+    summary: treasuryProcedure
+      .input(z.object({ fiscalYear: z.number().int().min(2020).max(2100) }))
+      .query(({ input, ctx }) => getTreasurySummary(input.fiscalYear, ctx.user.role !== "public_relations_officer")),
+
+    budgets: treasuryProcedure
+      .input(z.object({ fiscalYear: z.number().int().min(2020).max(2100) }))
+      .query(({ input }) => listFinancialBudgetCategories(input.fiscalYear)),
+
+    transactions: treasuryProcedure
+      .input(z.object({ fiscalYear: z.number().int().min(2020).max(2100).optional(), status: z.enum(["draft", "pending_approval", "approved", "returned", "void"]).optional() }).optional())
+      .query(({ input, ctx }) => {
+        if (ctx.user.role === "public_relations_officer") throw new TRPCError({ code: "FORBIDDEN", message: "يتاح لمسؤول العلاقات العامة الملخص المالي فقط" });
+        return listFinancialTransactions(input ?? {});
+      }),
+
+    audit: treasuryProcedure
+      .input(z.object({ transactionId: z.number().int().positive().optional() }).optional())
+      .query(({ input, ctx }) => {
+        if (ctx.user.role === "public_relations_officer") throw new TRPCError({ code: "FORBIDDEN", message: "سجل المالية غير متاح لمسؤول العلاقات العامة" });
+        return listFinancialAuditLogs(input?.transactionId);
+      }),
+
+    createBudget: treasuryProcedure
+      .input(z.object({
+        fiscalYear: z.number().int().min(2020).max(2100),
+        title: z.string().trim().min(2).max(140),
+        allocatedAmountCents: z.number().int().min(0).max(100_000_000),
+        currency: z.literal("ILS").default("ILS"),
+        notes: z.string().trim().max(2000).optional().nullable(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "treasurer" && ctx.user.role !== "tech_admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "إضافة بنود الميزانية مخصصة لأمين الصندوق" });
+        }
+        const row = await createFinancialBudgetCategory({ ...input, notes: input.notes ?? null, createdBy: ctx.user.id });
+        await writeFinancialAuditLog({ actorId: ctx.user.id, action: "budget.created", summary: `أُضيف بند ميزانية: ${row.title}` });
+        return row;
+      }),
+
+    updateBudget: treasuryProcedure
+      .input(z.object({ id: z.number().int().positive(), title: z.string().trim().min(2).max(140), allocatedAmountCents: z.number().int().min(0).max(100_000_000), currency: z.literal("ILS"), notes: z.string().trim().max(2000).optional().nullable() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "treasurer" && ctx.user.role !== "tech_admin") throw new TRPCError({ code: "FORBIDDEN" });
+        const row = await updateFinancialBudgetCategory(input.id, { title: input.title, allocatedAmountCents: input.allocatedAmountCents, currency: input.currency, notes: input.notes ?? null });
+        if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "بند الميزانية غير موجود" });
+        await writeFinancialAuditLog({ actorId: ctx.user.id, action: "budget.updated", summary: `عُدّل بند الميزانية: ${row.title}` });
+        return row;
+      }),
+
+    createTransaction: treasuryProcedure
+      .input(z.object({
+        categoryId: z.number().int().positive().nullable().optional(),
+        type: z.enum(["income", "expense"]),
+        title: z.string().trim().min(2).max(255),
+        description: z.string().trim().max(4000).optional().nullable(),
+        amountCents: z.number().int().positive().max(100_000_000),
+        currency: z.literal("ILS").default("ILS"),
+        transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ العملية غير صحيح"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "treasurer" && ctx.user.role !== "tech_admin") throw new TRPCError({ code: "FORBIDDEN", message: "إنشاء المسودات المالية مخصص لأمين الصندوق" });
+        const row = await createFinancialTransaction({ ...input, categoryId: input.categoryId ?? null, description: input.description ?? null, createdBy: ctx.user.id });
+        await writeFinancialAuditLog({ transactionId: row.id, actorId: ctx.user.id, action: "transaction.created", summary: `أُنشئت مسودة ${row.type === "income" ? "إيراد" : "مصروف"}: ${row.title}` });
+        return row;
+      }),
+
+    updateDraft: treasuryProcedure
+      .input(z.object({ id: z.number().int().positive(), categoryId: z.number().int().positive().nullable().optional(), type: z.enum(["income", "expense"]), title: z.string().trim().min(2).max(255), description: z.string().trim().max(4000).optional().nullable(), amountCents: z.number().int().positive().max(100_000_000), currency: z.literal("ILS"), transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+      .mutation(async ({ input, ctx }) => {
+        const row = await updateFinancialTransactionDraft(input.id, ctx.user.id, { ...input, categoryId: input.categoryId ?? null, description: input.description ?? null });
+        if (!row) throw new TRPCError({ code: "FORBIDDEN", message: "يمكن تعديل مسودتك أو عملية أُعيدت للتصحيح فقط" });
+        await writeFinancialAuditLog({ transactionId: row.id, actorId: ctx.user.id, action: "transaction.updated", summary: `عُدّلت المسودة: ${row.title}` });
+        return row;
+      }),
+
+    addReceipt: treasuryProcedure
+      .input(z.object({ transactionId: z.number().int().positive(), fileUrl: z.string().url().max(1000), fileKey: z.string().startsWith("attachments/").max(255), fileName: z.string().trim().min(1).max(255) }))
+      .mutation(async ({ input, ctx }) => {
+        const transaction = await getFinancialTransactionOwner(input.transactionId);
+        if (!transaction || transaction.createdBy !== ctx.user.id || !["draft", "returned"].includes(transaction.status)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "يمكن إرفاق PDF لمسودتك أو عملية أُعيدت للتصحيح فقط" });
+        }
+        const row = await addFinancialReceipt({ ...input, createdBy: ctx.user.id });
+        await writeFinancialAuditLog({ transactionId: input.transactionId, actorId: ctx.user.id, action: "receipt.added", summary: `أُرفق إيصال PDF: ${row.fileName}` });
+        return row;
+      }),
+
+    submit: treasuryProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        const row = await submitFinancialTransaction(input.id, ctx.user.id);
+        if (!row) throw new TRPCError({ code: "FORBIDDEN", message: "يمكن إرسال مسودتك أو عملية أُعيدت للتصحيح فقط" });
+        await writeFinancialAuditLog({ transactionId: row.id, actorId: ctx.user.id, action: "transaction.submitted", summary: `أُرسلت العملية للاعتماد: ${row.title}` });
+        return row;
+      }),
+
+    review: treasuryProcedure
+      .input(z.object({ id: z.number().int().positive(), decision: z.enum(["approved", "returned", "void"]), reviewNote: z.string().trim().max(2000).optional().nullable() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!canApproveTreasury(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: "اعتماد العمليات المالية مقصور على رئيس النادي أو نائبه أو المدير التقني" });
+        const transaction = await getFinancialTransactionOwner(input.id);
+        if (!transaction) throw new TRPCError({ code: "NOT_FOUND", message: "العملية المالية غير موجودة" });
+        if (transaction.createdBy === ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "لا يمكن اعتماد العملية من منشئها" });
+        const row = await reviewFinancialTransaction(input.id, ctx.user.id, input.decision, input.reviewNote ?? null);
+        if (!row) throw new TRPCError({ code: "BAD_REQUEST", message: "هذه العملية ليست بانتظار الاعتماد" });
+        await writeFinancialAuditLog({ transactionId: row.id, actorId: ctx.user.id, action: `transaction.${input.decision}`, summary: `${input.decision === "approved" ? "اعتُمدت" : input.decision === "returned" ? "أُعيدت للتصحيح" : "أُلغيت"} العملية: ${row.title}` });
+        return row;
       }),
   }),
 

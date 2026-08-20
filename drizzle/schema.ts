@@ -41,6 +41,8 @@ export const meetingParticipantStatusEnum = pgEnum("meeting_participant_status",
   "kicked", // removed from the meeting by a moderator
   "left", // left voluntarily
 ]);
+export const financialTransactionTypeEnum = pgEnum("financial_transaction_type", ["income", "expense"]);
+export const financialTransactionStatusEnum = pgEnum("financial_transaction_status", ["draft", "pending_approval", "approved", "returned", "void"]);
 
 /**
  * Core user table backing auth flow.
@@ -889,3 +891,78 @@ export const meetingGuestJoinRequests = pgTable("meetingGuestJoinRequests", {
 
 export type MeetingGuestJoinRequest = typeof meetingGuestJoinRequests.$inferSelect;
 export type InsertMeetingGuestJoinRequest = typeof meetingGuestJoinRequests.$inferInsert;
+
+/**
+ * Treasury data is deliberately separate from member onboarding and activity
+ * registrations. Amounts are stored as whole fils/cents to avoid floating
+ * point rounding errors; the default currency is the Israeli shekel (ILS).
+ */
+export const financialBudgetCategories = pgTable("financialBudgetCategories", {
+  id: serial("id").primaryKey(),
+  fiscalYear: integer("fiscalYear").notNull(),
+  title: varchar("title", { length: 140 }).notNull(),
+  allocatedAmountCents: integer("allocatedAmountCents").notNull(),
+  currency: varchar("currency", { length: 3 }).default("ILS").notNull(),
+  notes: text("notes"),
+  createdBy: integer("createdBy").notNull(), // Reference to users.id
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex("financial_budget_year_title_idx").on(table.fiscalYear, table.title),
+  index("financial_budget_year_idx").on(table.fiscalYear),
+]);
+export type FinancialBudgetCategory = typeof financialBudgetCategories.$inferSelect;
+export type InsertFinancialBudgetCategory = typeof financialBudgetCategories.$inferInsert;
+
+/** A transaction remains editable while draft/returned and cannot be removed
+ * once submitted. Approval is intentionally a separate role-gated action. */
+export const financialTransactions = pgTable("financialTransactions", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("categoryId"), // Reference to financialBudgetCategories.id
+  type: financialTransactionTypeEnum("type").notNull(),
+  status: financialTransactionStatusEnum("status").default("draft").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  amountCents: integer("amountCents").notNull(),
+  currency: varchar("currency", { length: 3 }).default("ILS").notNull(),
+  transactionDate: date("transactionDate").notNull(),
+  createdBy: integer("createdBy").notNull(), // Reference to users.id
+  submittedAt: timestamp("submittedAt"),
+  reviewedBy: integer("reviewedBy"), // Reference to users.id
+  reviewedAt: timestamp("reviewedAt"),
+  reviewNote: text("reviewNote"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  index("financial_transactions_status_date_idx").on(table.status, table.transactionDate),
+  index("financial_transactions_category_date_idx").on(table.categoryId, table.transactionDate),
+  index("financial_transactions_creator_date_idx").on(table.createdBy, table.createdAt),
+]);
+export type FinancialTransaction = typeof financialTransactions.$inferSelect;
+export type InsertFinancialTransaction = typeof financialTransactions.$inferInsert;
+
+/** PDF-only receipts use the existing hardened attachment storage flow. */
+export const financialReceipts = pgTable("financialReceipts", {
+  id: serial("id").primaryKey(),
+  transactionId: integer("transactionId").notNull(), // Reference to financialTransactions.id
+  fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
+  fileKey: varchar("fileKey", { length: 255 }).notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  createdBy: integer("createdBy").notNull(), // Reference to users.id
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("financial_receipts_transaction_idx").on(table.transactionId)]);
+export type FinancialReceipt = typeof financialReceipts.$inferSelect;
+export type InsertFinancialReceipt = typeof financialReceipts.$inferInsert;
+
+/** A financial audit trail is visible to the treasury workflow only; it is
+ * distinct from the technical security log and contains no member profile data. */
+export const financialAuditLogs = pgTable("financialAuditLogs", {
+  id: serial("id").primaryKey(),
+  transactionId: integer("transactionId"), // Reference to financialTransactions.id when applicable
+  actorId: integer("actorId").notNull(), // Reference to users.id
+  action: varchar("action", { length: 80 }).notNull(),
+  summary: varchar("summary", { length: 500 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("financial_audit_transaction_date_idx").on(table.transactionId, table.createdAt)]);
+export type FinancialAuditLog = typeof financialAuditLogs.$inferSelect;
+export type InsertFinancialAuditLog = typeof financialAuditLogs.$inferInsert;

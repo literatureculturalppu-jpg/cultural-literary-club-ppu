@@ -3,7 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context.js";
 import { logAction } from "../db.js";
-import { isAdminTierRole } from "../../shared/clubRoles.js";
+import { canAccessTreasury, isAdminTierRole } from "../../shared/clubRoles.js";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -96,6 +96,22 @@ export const activityApproverProcedure = protectedProcedure.use(
     }
     if (!isAdminTierRole(ctx.user.role) && ctx.user.role !== "supervisor") {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  }),
+);
+
+// Treasury access remains separate from the broad administrative surface.
+// The treasurer prepares records; leadership or technical management can
+// also inspect the workflow and approve submitted transactions.
+export const treasuryProcedure = protectedProcedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+    }
+    if (!canAccessTreasury(ctx.user.role)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "لوحة أمين الصندوق مخصصة لأمين الصندوق والرئيس أو نائبه والمدير التقني" });
     }
     return next({ ctx: { ...ctx, user: ctx.user } });
   }),

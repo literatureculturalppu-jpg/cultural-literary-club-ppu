@@ -47,6 +47,17 @@ export function isLeadershipRole(role: string | null | undefined): boolean {
   return role === "club_president" || role === "vice_president";
 }
 
+/** Treasury access is intentionally narrower than general administration. */
+export function canAccessTreasury(role: string | null | undefined): boolean {
+  return role === "treasurer" || role === "public_relations_officer" || isLeadershipRole(role) || role === "tech_admin";
+}
+
+/** Drafts are submitted by the treasurer; only leadership/technical
+ * management can approve or return them for correction. */
+export function canApproveTreasury(role: string | null | undefined): boolean {
+  return isLeadershipRole(role) || role === "tech_admin";
+}
+
 /**
  * Returns an Arabic rejection message when a role transition violates the
  * club hierarchy. General-agent population limits are enforced separately
