@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, User, Clock, Tag, BookOpen } from "lucide-react";
 import { useState } from "react";
 import ShareButtons from "@/components/ShareButtons";
+import { ContentDetailSeo } from "@/components/ContentDetailSeo";
 
 interface RichContent {
   subtitle?: string;
@@ -49,9 +50,12 @@ export default function ArticleDetail() {
   const images = rich.images || (data.imageUrl ? [{ url: data.imageUrl, key: "" }] : []);
   const tags = rich.tags || [];
   const bodyText = rich.content || (typeof data.content === "string" && !data.content.startsWith("{") ? data.content : "");
+  const description = (rich.subtitle || bodyText || `مقال من النادي الثقافي الأدبي في جامعة بوليتكنك فلسطين.`).replace(/\s+/g, " ").trim().slice(0, 155);
+  const articlePath = `/articles/${encodeURIComponent(params.id || String(data.id))}`;
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
+      <ContentDetailSeo title={`${data.title} | النادي الثقافي الأدبي - جامعة بوليتكنك فلسطين`} description={description} path={articlePath} structuredData={{ "@context": "https://schema.org", "@type": "Article", headline: data.title, description, inLanguage: "ar", datePublished: new Date(data.createdAt).toISOString(), author: { "@type": "Person", name: data.author || "النادي الثقافي الأدبي" }, publisher: { "@type": "Organization", name: "النادي الثقافي الأدبي - جامعة بوليتكنك فلسطين" }, mainEntityOfPage: `https://cultural-literary-club-ppu.vercel.app${articlePath}`, image: images[0]?.url }} />
       {/* Header */}
       <section className="bg-gradient-to-b from-accent/10 to-background py-10 md:py-14">
         <div className="container max-w-4xl">

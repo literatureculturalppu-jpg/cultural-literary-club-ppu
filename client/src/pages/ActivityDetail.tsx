@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import ActivityRegistrationModal from "@/components/ActivityRegistrationModal";
+import { ContentDetailSeo } from "@/components/ContentDetailSeo";
 
 interface ActivityContent {
   category?: string;
@@ -83,6 +84,8 @@ export default function ActivityDetail() {
   const hasPdf = !!contentData.pdf;
   const canManageRegistrations = user?.role === "admin" || user?.role === "club_president" || user?.role === "vice_president" || user?.role === "public_relations_officer" || user?.role === "tech_admin" || user?.role === "supervisor";
   const registrationClosed = status === "completed";
+  const activityPath = `/activities/${activity.id}`;
+  const description = (activity.description || `نشاط ثقافي وأدبي يقدمه النادي الثقافي الأدبي في جامعة بوليتكنك فلسطين.`).replace(/\s+/g, " ").trim().slice(0, 155);
 
   const handleRegistration = () => {
     if (registrationClosed) {
@@ -98,6 +101,7 @@ export default function ActivityDetail() {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
+      <ContentDetailSeo title={`${activity.title} | فعاليات النادي الثقافي الأدبي`} description={description} path={activityPath} structuredData={{ "@context": "https://schema.org", "@type": "Event", name: activity.title, description, startDate: new Date(activity.startDate).toISOString(), endDate: activity.endDate ? new Date(activity.endDate).toISOString() : undefined, image: activity.imageUrl || undefined, eventStatus: status === "completed" ? "https://schema.org/EventCompleted" : "https://schema.org/EventScheduled", organizer: { "@type": "Organization", name: "النادي الثقافي الأدبي - جامعة بوليتكنك فلسطين" }, url: `https://cultural-literary-club-ppu.vercel.app${activityPath}` }} />
       {/* Header */}
       <section className="bg-gradient-to-b from-accent/10 to-background py-12 md:py-16">
         <div className="container">

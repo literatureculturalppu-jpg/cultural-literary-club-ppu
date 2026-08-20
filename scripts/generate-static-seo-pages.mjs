@@ -26,7 +26,9 @@ for (const [path, [title, description]] of Object.entries(pages)) {
   let html = base;
   html = replace(html, /<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
   html = replace(html, /<meta\s+name="description"\s+content="[^"]*"\s*\/?\s*>/i, `<meta name="description" content="${escapeHtml(description)}" />`);
-  html = replace(html, /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${url}" />`);
+  html = /<link\s+rel="canonical"/i.test(html)
+    ? replace(html, /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?\s*>/i, `<link rel="canonical" href="${url}" />`)
+    : html.replace("</head>", `    <link rel="canonical" href="${url}" />\n  </head>`);
   html = replace(html, /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?\s*>/i, `<meta property="og:title" content="${escapeHtml(title)}" />`);
   html = replace(html, /<meta\s+property="og:description"\s+content="[^"]*"\s*\/?\s*>/i, `<meta property="og:description" content="${escapeHtml(description)}" />`);
   html = replace(html, /<meta\s+property="og:url"\s+content="[^"]*"\s*\/?\s*>/i, `<meta property="og:url" content="${url}" />`);
