@@ -3490,7 +3490,7 @@ export const appRouter = router({
   treasury: router({
     summary: treasuryProcedure
       .input(z.object({ fiscalYear: z.number().int().min(2020).max(2100) }))
-      .query(({ input, ctx }) => getTreasurySummary(input.fiscalYear, ctx.user.role !== "public_relations_officer")),
+      .query(({ input }) => getTreasurySummary(input.fiscalYear)),
 
     budgets: treasuryProcedure
       .input(z.object({ fiscalYear: z.number().int().min(2020).max(2100) }))
@@ -3498,17 +3498,11 @@ export const appRouter = router({
 
     transactions: treasuryProcedure
       .input(z.object({ fiscalYear: z.number().int().min(2020).max(2100).optional(), status: z.enum(["draft", "pending_approval", "approved", "returned", "void"]).optional() }).optional())
-      .query(({ input, ctx }) => {
-        if (ctx.user.role === "public_relations_officer") throw new TRPCError({ code: "FORBIDDEN", message: "يتاح لمسؤول العلاقات العامة الملخص المالي فقط" });
-        return listFinancialTransactions(input ?? {});
-      }),
+      .query(({ input }) => listFinancialTransactions(input ?? {})),
 
     audit: treasuryProcedure
       .input(z.object({ transactionId: z.number().int().positive().optional() }).optional())
-      .query(({ input, ctx }) => {
-        if (ctx.user.role === "public_relations_officer") throw new TRPCError({ code: "FORBIDDEN", message: "سجل المالية غير متاح لمسؤول العلاقات العامة" });
-        return listFinancialAuditLogs(input?.transactionId);
-      }),
+      .query(({ input }) => listFinancialAuditLogs(input?.transactionId)),
 
     createBudget: treasuryProcedure
       .input(z.object({
@@ -3519,9 +3513,6 @@ export const appRouter = router({
         notes: z.string().trim().max(2000).optional().nullable(),
       }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "treasurer" && ctx.user.role !== "tech_admin") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "إضافة بنود الميزانية مخصصة لأمين الصندوق" });
-        }
         const row = await createFinancialBudgetCategory({ ...input, notes: input.notes ?? null, createdBy: ctx.user.id });
         await writeFinancialAuditLog({ actorId: ctx.user.id, action: "budget.created", summary: `أُضيف بند ميزانية: ${row.title}` });
         return row;
@@ -3530,7 +3521,6 @@ export const appRouter = router({
     updateBudget: treasuryProcedure
       .input(z.object({ id: z.number().int().positive(), title: z.string().trim().min(2).max(140), allocatedAmountCents: z.number().int().min(0).max(100_000_000), currency: z.literal("ILS"), notes: z.string().trim().max(2000).optional().nullable() }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "treasurer" && ctx.user.role !== "tech_admin") throw new TRPCError({ code: "FORBIDDEN" });
         const row = await updateFinancialBudgetCategory(input.id, { title: input.title, allocatedAmountCents: input.allocatedAmountCents, currency: input.currency, notes: input.notes ?? null });
         if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "بند الميزانية غير موجود" });
         await writeFinancialAuditLog({ actorId: ctx.user.id, action: "budget.updated", summary: `عُدّل بند الميزانية: ${row.title}` });
@@ -3548,7 +3538,6 @@ export const appRouter = router({
         transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ العملية غير صحيح"),
       }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.user.role !== "treasurer" && ctx.user.role !== "tech_admin") throw new TRPCError({ code: "FORBIDDEN", message: "إنشاء المسودات المالية مخصص لأمين الصندوق" });
         const row = await createFinancialTransaction({ ...input, categoryId: input.categoryId ?? null, description: input.description ?? null, createdBy: ctx.user.id });
         await writeFinancialAuditLog({ transactionId: row.id, actorId: ctx.user.id, action: "transaction.created", summary: `أُنشئت مسودة ${row.type === "income" ? "إيراد" : "مصروف"}: ${row.title}` });
         return row;

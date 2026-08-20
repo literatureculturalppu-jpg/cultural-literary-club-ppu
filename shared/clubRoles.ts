@@ -47,13 +47,14 @@ export function isLeadershipRole(role: string | null | undefined): boolean {
   return role === "club_president" || role === "vice_president";
 }
 
-/** Treasury access is intentionally narrower than general administration. */
+/** Treasury access grants the operational workspace: budgets, transaction
+ * drafts, receipts, reports, and the financial audit trail. */
 export function canAccessTreasury(role: string | null | undefined): boolean {
   return role === "treasurer" || role === "public_relations_officer" || isLeadershipRole(role) || role === "tech_admin";
 }
 
-/** Drafts are submitted by the treasurer; only leadership/technical
- * management can approve or return them for correction. */
+/** Approval remains a separate safeguard: an approver cannot review a
+ * transaction they created themselves. */
 export function canApproveTreasury(role: string | null | undefined): boolean {
   return isLeadershipRole(role) || role === "tech_admin";
 }

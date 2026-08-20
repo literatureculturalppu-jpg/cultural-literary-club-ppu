@@ -61,13 +61,12 @@ export default function TreasuryDashboard() {
   const receiptInputRef = useRef<HTMLInputElement>(null);
   const [receiptTargetId, setReceiptTargetId] = useState<number | null>(null);
 
-  const canDraft = user?.role === "treasurer" || user?.role === "tech_admin";
+  const canDraft = canAccessTreasury(user?.role);
   const canReview = canApproveTreasury(user?.role);
-  const isPublicRelationsViewer = user?.role === "public_relations_officer";
   const queryInput = { fiscalYear: year };
   const summaryQuery = trpc.treasury.summary.useQuery(queryInput, { enabled: Boolean(user && canAccessTreasury(user.role)) });
-  const transactionsQuery = trpc.treasury.transactions.useQuery({ ...queryInput, ...(transactionStatus === "all" ? {} : { status: transactionStatus }) }, { enabled: Boolean(user && canAccessTreasury(user.role) && !isPublicRelationsViewer) });
-  const auditQuery = trpc.treasury.audit.useQuery(undefined, { enabled: Boolean(user && canAccessTreasury(user.role) && tab === "audit" && !isPublicRelationsViewer) });
+  const transactionsQuery = trpc.treasury.transactions.useQuery({ ...queryInput, ...(transactionStatus === "all" ? {} : { status: transactionStatus }) }, { enabled: Boolean(user && canAccessTreasury(user.role)) });
+  const auditQuery = trpc.treasury.audit.useQuery(undefined, { enabled: Boolean(user && canAccessTreasury(user.role) && tab === "audit") });
   const utils = trpc.useUtils();
 
   const refresh = async () => {
@@ -128,8 +127,7 @@ export default function TreasuryDashboard() {
 
       <section className="container py-8">
         <div className="mb-6 flex flex-wrap gap-2 border-b pb-4">{[
-          ["overview", "الملخص", BarChart3],
-          ...(!isPublicRelationsViewer ? [["transactions", "العمليات", ReceiptText], ["budget", "الميزانية", WalletCards], ["audit", "سجل المالية", ShieldCheck]] : []),
+          ["overview", "الملخص", BarChart3], ["transactions", "العمليات", ReceiptText], ["budget", "الميزانية", WalletCards], ["audit", "سجل المالية", ShieldCheck],
         ].map(([key, label, Icon]) => <Button key={String(key)} variant={tab === key ? "default" : "outline"} onClick={() => setTab(key as typeof tab)} className="gap-2"><Icon className="h-4 w-4" />{String(label)}</Button>)}</div>
 
         {tab === "overview" && <div className="space-y-6">

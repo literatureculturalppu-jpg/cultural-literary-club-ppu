@@ -24,7 +24,7 @@ describe("club leadership role policy", () => {
     expect(getRoleTransitionDenial("tech_admin", "user", "vice_president")).toBeNull();
   });
 
-  it("grants treasury visibility to the treasurer and explicitly authorized leadership roles", () => {
+  it("grants full treasury operating access to the treasurer and every explicitly authorized role", () => {
     expect(canAccessTreasury("treasurer")).toBe(true);
     expect(canAccessTreasury("tech_admin")).toBe(true);
     expect(canAccessTreasury("club_president")).toBe(true);
@@ -34,7 +34,7 @@ describe("club leadership role policy", () => {
     expect(canAccessTreasury("admin")).toBe(false);
   });
 
-  it("keeps financial approval outside the public-relations view-only role", () => {
+  it("keeps approval separate from operating access and prevents self-approval safeguards from weakening", () => {
     expect(canApproveTreasury("tech_admin")).toBe(true);
     expect(canApproveTreasury("club_president")).toBe(true);
     expect(canApproveTreasury("vice_president")).toBe(true);
