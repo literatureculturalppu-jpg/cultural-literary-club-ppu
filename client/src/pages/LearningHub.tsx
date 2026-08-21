@@ -29,7 +29,7 @@ export default function LearningHub() {
   const filteredCourses = useMemo(() => courses.filter((course) => {
     const matchesLevel = level === "all" || course.level === level;
     const normalized = search.trim().toLocaleLowerCase("ar");
-    const matchesSearch = !normalized || `${course.title} ${course.courseCode} ${course.description || ""}`.toLocaleLowerCase("ar").includes(normalized);
+    const matchesSearch = !normalized || `${course.title} ${course.courseCode}`.toLocaleLowerCase("ar").includes(normalized);
     return matchesLevel && matchesSearch;
   }), [courses, level, search]);
   const selectedCourse = courses.find((course) => course.id === selectedId) ?? null;
@@ -51,7 +51,7 @@ export default function LearningHub() {
 
     <main className="container max-w-6xl py-7 space-y-6">
       <div className="grid gap-3 rounded-2xl border bg-card p-3 md:grid-cols-[1fr_auto_auto]">
-        <div className="relative"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث باسم المساق أو رقمه..." className="pr-9" /></div>
+        <div className="relative"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث باسم المساق أو رقمه فقط..." className="pr-9" /></div>
         <div className="flex rounded-xl bg-muted p-1"><Button onClick={() => { setAudience("students"); setSelectedId(null); }} variant={audience === "students" ? "default" : "ghost"} className="flex-1 gap-2"><GraduationCap className="h-4 w-4" />طلاب</Button><Button onClick={() => { setAudience("teachers"); setSelectedId(null); }} variant={audience === "teachers" ? "default" : "ghost"} className="flex-1 gap-2"><UsersRound className="h-4 w-4" />أساتذة</Button></div>
         <label className="flex items-center gap-2 rounded-lg border px-3 text-sm"><Filter className="h-4 w-4 text-muted-foreground" /><select value={level} onChange={(e) => setLevel(e.target.value)} className="bg-transparent outline-none"><option value="all">كل المستويات</option>{levels.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       </div>
