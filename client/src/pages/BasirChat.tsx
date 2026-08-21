@@ -2,13 +2,16 @@ import { AIChatBox } from "@/components/AIChatBox";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Link, useLocation } from "wouter";
-import { Bot, Trash2 } from "lucide-react";
+import { Bot, ClipboardList, MessageSquare, Trash2 } from "lucide-react";
 import { renderBasirContent } from "@/lib/renderBasirContent";
 import { useBasirChat } from "@/hooks/useBasirChat";
+import { BasirAgentConsole } from "@/components/BasirAgentConsole";
+import { useState } from "react";
 
 export default function BasirChat() {
   const { isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
+  const [view, setView] = useState<"chat" | "agent">("chat");
   const { messages, sendMessage, stopGenerating, clearHistory, isLoading, settings, usage, quotaExceeded } =
     useBasirChat(isAuthenticated, (path) => setLocation(path));
 
@@ -91,6 +94,13 @@ export default function BasirChat() {
         </div>
       </section>
 
+      <div className="container mt-4">
+        <div className="mx-auto flex max-w-4xl gap-2 rounded-2xl bg-muted p-1">
+          <Button variant={view === "chat" ? "default" : "ghost"} className="flex-1 gap-2" onClick={() => setView("chat")}><MessageSquare className="h-4 w-4" />المحادثة</Button>
+          <Button variant={view === "agent" ? "default" : "ghost"} className="flex-1 gap-2" onClick={() => setView("agent")}><ClipboardList className="h-4 w-4" />مركز الوكيل</Button>
+        </div>
+      </div>
+
       {quotaExceeded && (
         <div className="container mt-4">
           <div className="max-w-4xl mx-auto bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 rounded-xl px-4 py-3 text-sm">
@@ -99,6 +109,9 @@ export default function BasirChat() {
         </div>
       )}
 
+      {view === "agent" ? (
+        <section className="py-4 md:py-6"><div className="container max-w-4xl"><BasirAgentConsole onUsePrompt={(prompt) => { setView("chat"); setTimeout(() => sendMessage(prompt), 0); }} /></div></section>
+      ) : (
       <section className="py-4 md:py-6">
         <div className="container max-w-4xl">
           <AIChatBox
@@ -116,6 +129,7 @@ export default function BasirChat() {
             renderAssistantContent={renderBasirContent}
             allowAttachments
             suggestedPrompts={[
+              "حلّل طلبي كوكيل: ضع خطة ثم اطلب موافقتي قبل أي إجراء خارجي",
               "ما هو نادي بصيرة؟",
               "ما هي أنشطة النادي القادمة؟",
               "رشّح لي كتاباً من كتب النادي",
@@ -124,6 +138,7 @@ export default function BasirChat() {
           />
         </div>
       </section>
+      )}
     </div>
   );
 }
