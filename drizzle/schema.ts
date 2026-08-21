@@ -557,6 +557,65 @@ export const aiUsage = pgTable("aiUsage", {
 export type AiUsage = typeof aiUsage.$inferSelect;
 export type InsertAiUsage = typeof aiUsage.$inferInsert;
 
+// ── Member Learning Hub ──────────────────────────────────────────────
+// Video files are intentionally not stored here. Each lesson only keeps an
+// approved external URL plus its display metadata and cover image.
+export const learningSettings = pgTable("learningSettings", {
+  id: serial("id").primaryKey(),
+  enabled: boolean("enabled").default(false).notNull(),
+  updatedBy: integer("updatedBy"),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const learningCourses = pgTable("learningCourses", {
+  id: serial("id").primaryKey(),
+  audience: varchar("audience", { length: 20 }).notNull(), // students | teachers
+  title: varchar("title", { length: 255 }).notNull(),
+  courseCode: varchar("courseCode", { length: 80 }).notNull(),
+  level: varchar("level", { length: 100 }).notNull(),
+  description: text("description"),
+  coverImageUrl: varchar("coverImageUrl", { length: 1000 }),
+  averageVideoMinutes: integer("averageVideoMinutes").default(0).notNull(),
+  published: boolean("published").default(true).notNull(),
+  createdBy: integer("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  index("learning_courses_audience_level_idx").on(table.audience, table.level),
+  index("learning_courses_published_created_idx").on(table.published, table.createdAt),
+]);
+
+export const learningVideos = pgTable("learningVideos", {
+  id: serial("id").primaryKey(),
+  courseId: integer("courseId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  videoUrl: varchar("videoUrl", { length: 1000 }).notNull(),
+  coverImageUrl: varchar("coverImageUrl", { length: 1000 }),
+  description: text("description"),
+  durationMinutes: integer("durationMinutes").default(0).notNull(),
+  sortOrder: integer("sortOrder").default(0).notNull(),
+  createdBy: integer("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [
+  index("learning_videos_course_order_idx").on(table.courseId, table.sortOrder),
+]);
+
+export const learningRatings = pgTable("learningRatings", {
+  id: serial("id").primaryKey(),
+  courseId: integer("courseId").notNull(),
+  userId: integer("userId").notNull(),
+  rating: integer("rating").notNull(),
+  comment: varchar("comment", { length: 800 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex("learning_ratings_course_user_unique").on(table.courseId, table.userId),
+  index("learning_ratings_course_idx").on(table.courseId),
+]);
+
+export type InsertLearningCourse = typeof learningCourses.$inferInsert;
+export type InsertLearningVideo = typeof learningVideos.$inferInsert;
+
 /**
  * Guest activity registrations – for users outside the club who register
  * for an activity without a club account.

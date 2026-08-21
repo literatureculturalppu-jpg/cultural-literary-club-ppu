@@ -107,6 +107,16 @@ import {
   createNotificationsForUsers,
   getAiSettings,
   updateAiEnabled,
+  getLearningSettings,
+  updateLearningEnabled,
+  getLearningCourses,
+  getLearningCourseById,
+  createLearningCourse,
+  updateLearningCourse,
+  deleteLearningCourse,
+  createLearningVideo,
+  deleteLearningVideo,
+  rateLearningCourse,
   getAiPdfFiles,
   createAiPdfFile,
   deleteAiPdfFile,
@@ -2952,6 +2962,57 @@ export const appRouter = router({
       .input(z.number())
       .mutation(async ({ input }) => {
         return deleteAiPdfFile(input);
+      }),
+  }),
+
+  learning: router({
+    getSettings: publicProcedure.query(async () => getLearningSettings()),
+    updateSettings: techAdminProcedure
+      .input(z.object({ enabled: z.boolean() }))
+      .mutation(async ({ input, ctx }) => updateLearningEnabled(input.enabled, ctx.user.id)),
+    list: protectedProcedure
+      .input(z.object({ audience: z.enum(["students", "teachers"]).optional() }).optional())
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.approvalStatus !== "approved") throw new TRPCError({ code: "FORBIDDEN", message: "المنصة التعليمية متاحة لأعضاء النادي المعتمدين فقط" });
+        const settings = await getLearningSettings();
+        if (!settings.enabled) throw new TRPCError({ code: "FORBIDDEN", message: "المنصة التعليمية غير مفعّلة حالياً" });
+        return getLearningCourses(input?.audience);
+      }),
+    getById: protectedProcedure
+      .input(z.number().int().positive())
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.approvalStatus !== "approved") throw new TRPCError({ code: "FORBIDDEN", message: "المنصة التعليمية متاحة لأعضاء النادي المعتمدين فقط" });
+        const settings = await getLearningSettings();
+        if (!settings.enabled) throw new TRPCError({ code: "FORBIDDEN", message: "المنصة التعليمية غير مفعّلة حالياً" });
+        const course = await getLearningCourseById(input);
+        if (!course) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على المساق" });
+        return course;
+      }),
+    listManage: adminProcedure.query(async () => getLearningCourses(undefined, true)),
+    create: adminProcedure
+      .input(z.object({ audience: z.enum(["students", "teachers"]), title: z.string().trim().min(2).max(255), courseCode: z.string().trim().min(1).max(80), level: z.string().trim().min(1).max(100), description: z.string().trim().max(5000).optional(), coverImageUrl: z.string().url().max(1000).optional(), averageVideoMinutes: z.number().int().min(0).max(10000).default(0) }))
+      .mutation(async ({ input, ctx }) => createLearningCourse({ ...input, description: input.description || null, coverImageUrl: input.coverImageUrl || null, createdBy: ctx.user.id })),
+    update: adminProcedure
+      .input(z.object({ id: z.number().int().positive(), audience: z.enum(["students", "teachers"]).optional(), title: z.string().trim().min(2).max(255).optional(), courseCode: z.string().trim().min(1).max(80).optional(), level: z.string().trim().min(1).max(100).optional(), description: z.string().trim().max(5000).nullable().optional(), coverImageUrl: z.string().url().max(1000).nullable().optional(), averageVideoMinutes: z.number().int().min(0).max(10000).optional(), published: z.boolean().optional() }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updateLearningCourse(id, data);
+      }),
+    delete: adminProcedure.input(z.number().int().positive()).mutation(async ({ input }) => deleteLearningCourse(input)),
+    addVideo: adminProcedure
+      .input(z.object({ courseId: z.number().int().positive(), title: z.string().trim().min(2).max(255), videoUrl: z.string().url().max(1000), coverImageUrl: z.string().url().max(1000).optional(), description: z.string().trim().max(5000).optional(), durationMinutes: z.number().int().min(0).max(10000).default(0), sortOrder: z.number().int().min(0).max(100000).default(0) }))
+      .mutation(async ({ input, ctx }) => createLearningVideo({ ...input, coverImageUrl: input.coverImageUrl || null, description: input.description || null, createdBy: ctx.user.id })),
+    deleteVideo: adminProcedure.input(z.number().int().positive()).mutation(async ({ input }) => deleteLearningVideo(input)),
+    rate: protectedProcedure
+      .input(z.object({ courseId: z.number().int().positive(), rating: z.number().int().min(1).max(5), comment: z.string().trim().max(800).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.approvalStatus !== "approved") throw new TRPCError({ code: "FORBIDDEN", message: "التقييم متاح لأعضاء النادي المعتمدين فقط" });
+        const settings = await getLearningSettings();
+        if (!settings.enabled) throw new TRPCError({ code: "FORBIDDEN", message: "المنصة التعليمية غير مفعّلة حالياً" });
+        const course = await getLearningCourseById(input.courseId);
+        if (!course) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على المساق" });
+        await rateLearningCourse(input.courseId, ctx.user.id, input.rating, input.comment || null);
+        return { success: true };
       }),
   }),
 

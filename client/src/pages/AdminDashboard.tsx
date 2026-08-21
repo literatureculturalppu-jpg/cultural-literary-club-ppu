@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bell, Bot, UsersRound, UserCog, FileEdit, FileClock, Video, WalletCards } from "lucide-react";
+import { Calendar, FileText, Users, MessageSquare, Plus, Trophy, AlertCircle, Mail, Bell, Bot, UsersRound, UserCog, FileEdit, FileClock, Video, WalletCards, GraduationCap } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useEffect } from "react";
 import { canAccessTreasury, isAdminTierRole, ROLE_LABELS } from "@shared/clubRoles";
@@ -31,6 +31,12 @@ export default function AdminDashboard() {
   });
   const { data: pendingProfileEdits = [] } = trpc.profileEditRequests.listPending.useQuery(undefined, {
     enabled: isAdminTier,
+  });
+  const { data: learningSettings, refetch: refetchLearningSettings } = trpc.learning.getSettings.useQuery(undefined, {
+    enabled: isAdminTier,
+  });
+  const updateLearningSettings = trpc.learning.updateSettings.useMutation({
+    onSuccess: () => refetchLearningSettings(),
   });
   const teamsPendingCount = adminTeams.reduce(
     (sum, t) => sum + t.pendingJoinCount + t.pendingActionCount,
@@ -217,6 +223,14 @@ export default function AdminDashboard() {
                   إعدادات بصير
                 </Button>
               </Link>
+              {isAdminTier && (
+                <Link href="/admin/learning">
+                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-sky-300 text-sky-800 hover:bg-sky-50">
+                    <GraduationCap className="w-4 h-4" />
+                    إدارة المنصة التعليمية
+                  </Button>
+                </Link>
+              )}
               <Link href="/admin/team-members">
                 <Button variant="outline" className="w-full flex items-center justify-center gap-2">
                   <UsersRound className="w-4 h-4" />
@@ -266,12 +280,23 @@ export default function AdminDashboard() {
                 </>
               )}
               {user?.role === "tech_admin" && (
-                <Link href="/admin/work-logs">
-                  <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-rose-300 text-rose-700 hover:bg-rose-50">
-                    <FileClock className="w-4 h-4" />
-                    سجل الأمن
+                <>
+                  <Link href="/admin/work-logs">
+                    <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-rose-300 text-rose-700 hover:bg-rose-50">
+                      <FileClock className="w-4 h-4" />
+                      سجل الأمن
+                    </Button>
+                  </Link>
+                  <Button
+                    variant={learningSettings?.enabled ? "default" : "outline"}
+                    disabled={updateLearningSettings.isPending}
+                    onClick={() => updateLearningSettings.mutate({ enabled: !learningSettings?.enabled })}
+                    className="w-full flex items-center justify-center gap-2"
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    {updateLearningSettings.isPending ? "جاري الحفظ..." : learningSettings?.enabled ? "تعطيل المنصة التعليمية" : "تفعيل المنصة التعليمية"}
                   </Button>
-                </Link>
+                </>
               )}
             </div>
           </div>

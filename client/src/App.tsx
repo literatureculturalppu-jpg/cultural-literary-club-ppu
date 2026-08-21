@@ -62,6 +62,8 @@ const RegistrationSettings = lazy(() => import("./pages/RegistrationSettings"));
 const Login = lazy(() => import("./pages/Login"));
 const BasirChat = lazy(() => import("./pages/BasirChat"));
 const AdminBasirSettings = lazy(() => import("./pages/AdminBasirSettings"));
+const LearningHub = lazy(() => import("./pages/LearningHub"));
+const AdminLearning = lazy(() => import("./pages/AdminLearning"));
 const QuickLinks = lazy(() => import("./pages/QuickLinks"));
 const AdminActivityRegistrations = lazy(() => import("./pages/AdminActivityRegistrations"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
@@ -127,6 +129,7 @@ function Router() {
         <Route path={"/admin/registration-settings"} component={RegistrationSettings} />
         <Route path={"/admin/activities/:id/registrations"} component={AdminActivityRegistrations} />
         <Route path={"/admin/basir-settings"} component={AdminBasirSettings} />
+        <Route path={"/admin/learning"} component={AdminLearning} />
         <Route path={"/membership/verify/:token"} component={MembershipCardVerify} />
 
         <Route path={"/pending-approval"} component={PendingApprovalRoute} />
@@ -141,6 +144,7 @@ function Router() {
         <Route path={"/books"} component={Books} />
         <Route path={"/books/google/:id"} component={BookDetail} />
         <Route path={"/basir"} component={BasirChat} />
+        <Route path={"/learning"} component={LearningHub} />
         <Route path={"/quick-links"} component={QuickLinks} />
 
         <Route path={"/404"} component={NotFound} />

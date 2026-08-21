@@ -25,6 +25,10 @@ import {
   aiSettings,
   aiPdfFiles,
   aiUsage,
+  learningSettings,
+  learningCourses,
+  learningVideos,
+  learningRatings,
   type Activity,
   type Article,
   type Achievement,
@@ -2199,6 +2203,99 @@ export async function updateAiEnabled(enabled: boolean) {
     await db.update(aiSettings).set({ enabled }).where(eq(aiSettings.id, existing[0].id));
   }
   return { enabled };
+}
+
+// ── Member Learning Hub ──────────────────────────────────────────────
+
+export async function getLearningSettings() {
+  const db = await getDb();
+  if (!db) return { id: 1, enabled: false, updatedBy: null, updatedAt: new Date() };
+  const rows = await db.select().from(learningSettings).limit(1);
+  if (rows.length === 0) {
+    await db.insert(learningSettings).values({ enabled: false });
+    return { id: 1, enabled: false, updatedBy: null, updatedAt: new Date() };
+  }
+  return rows[0];
+}
+
+export async function updateLearningEnabled(enabled: boolean, updatedBy: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db.select().from(learningSettings).limit(1);
+  if (existing.length === 0) await db.insert(learningSettings).values({ enabled, updatedBy });
+  else await db.update(learningSettings).set({ enabled, updatedBy }).where(eq(learningSettings.id, existing[0].id));
+  return { enabled };
+}
+
+export async function getLearningCourses(audience?: "students" | "teachers", includeUnpublished = false) {
+  const db = await getDb();
+  if (!db) return [];
+  const courses = includeUnpublished
+    ? audience
+      ? await db.select().from(learningCourses).where(eq(learningCourses.audience, audience)).orderBy(desc(learningCourses.createdAt))
+      : await db.select().from(learningCourses).orderBy(desc(learningCourses.createdAt))
+    : audience
+      ? await db.select().from(learningCourses).where(and(eq(learningCourses.audience, audience), eq(learningCourses.published, true))).orderBy(desc(learningCourses.createdAt))
+      : await db.select().from(learningCourses).where(eq(learningCourses.published, true)).orderBy(desc(learningCourses.createdAt));
+  const courseIds = courses.map((course) => course.id);
+  if (courseIds.length === 0) return [];
+  const [videos, ratings] = await Promise.all([
+    db.select().from(learningVideos).where(inArray(learningVideos.courseId, courseIds)).orderBy(learningVideos.sortOrder),
+    db.select().from(learningRatings).where(inArray(learningRatings.courseId, courseIds)),
+  ]);
+  return courses.map((course) => {
+    const courseVideos = videos.filter((video) => video.courseId === course.id);
+    const courseRatings = ratings.filter((rating) => rating.courseId === course.id);
+    return { ...course, videoCount: courseVideos.length, videos: courseVideos, ratingCount: courseRatings.length, averageRating: courseRatings.length ? Math.round((courseRatings.reduce((sum, rating) => sum + rating.rating, 0) / courseRatings.length) * 10) / 10 : 0 };
+  });
+}
+
+export async function getLearningCourseById(id: number) {
+  const courses = await getLearningCourses();
+  return courses.find((course) => course.id === id) ?? null;
+}
+
+export async function createLearningCourse(data: { audience: "students" | "teachers"; title: string; courseCode: string; level: string; description?: string | null; coverImageUrl?: string | null; averageVideoMinutes: number; createdBy: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [course] = await db.insert(learningCourses).values(data).returning();
+  return course;
+}
+
+export async function updateLearningCourse(id: number, data: Partial<{ audience: "students" | "teachers"; title: string; courseCode: string; level: string; description: string | null; coverImageUrl: string | null; averageVideoMinutes: number; published: boolean }>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [course] = await db.update(learningCourses).set(data).where(eq(learningCourses.id, id)).returning();
+  return course ?? null;
+}
+
+export async function deleteLearningCourse(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(learningVideos).where(eq(learningVideos.courseId, id));
+  await db.delete(learningRatings).where(eq(learningRatings.courseId, id));
+  await db.delete(learningCourses).where(eq(learningCourses.id, id));
+}
+
+export async function createLearningVideo(data: { courseId: number; title: string; videoUrl: string; coverImageUrl?: string | null; description?: string | null; durationMinutes: number; sortOrder: number; createdBy: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [video] = await db.insert(learningVideos).values(data).returning();
+  return video;
+}
+
+export async function deleteLearningVideo(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(learningVideos).where(eq(learningVideos.id, id));
+}
+
+export async function rateLearningCourse(courseId: number, userId: number, rating: number, comment?: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db.select().from(learningRatings).where(and(eq(learningRatings.courseId, courseId), eq(learningRatings.userId, userId))).limit(1);
+  if (existing.length) await db.update(learningRatings).set({ rating, comment: comment ?? null }).where(eq(learningRatings.id, existing[0].id));
+  else await db.insert(learningRatings).values({ courseId, userId, rating, comment: comment ?? null });
 }
 
 // ── AI PDF Files ────────────────────────────────────────────────────

@@ -13,7 +13,9 @@ export default function Navigation() {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [location] = useLocation();
   const { data: aiSettings } = trpc.basir.getSettings.useQuery();
+  const { data: learningSettings } = trpc.learning.getSettings.useQuery();
   const aiEnabled = aiSettings?.enabled ?? false;
+  const learningEnabled = learningSettings?.enabled ?? false;
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -32,6 +34,7 @@ export default function Navigation() {
     { href: "/achievements", label: "الإنجازات" },
     { href: "/books", label: "الكتب" },
     ...(isAuthenticated ? [{ href: "/teams", label: "الفرق" }] : []),
+    ...(isAuthenticated && user?.approvalStatus === "approved" && learningEnabled ? [{ href: "/learning", label: "المنصة التعليمية" }] : []),
   ];
 
   const isActive = (href: string) => {
