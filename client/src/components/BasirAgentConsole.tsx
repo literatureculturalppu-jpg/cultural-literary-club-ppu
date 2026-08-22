@@ -11,7 +11,6 @@ const panels: Array<{ id: Panel; label: string; icon: typeof LayoutDashboard }> 
   { id: "tasks", label: "مهامي", icon: CheckCircle2 },
   { id: "memory", label: "الذاكرة", icon: BrainCircuit },
   { id: "automation", label: "الأتمتة", icon: CalendarClock },
-  { id: "services", label: "الخدمات", icon: LockKeyhole },
 ];
 
 export function BasirAgentConsole({ onUsePrompt }: { onUsePrompt: (prompt: string) => void }) {
