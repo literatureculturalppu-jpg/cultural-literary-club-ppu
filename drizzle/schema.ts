@@ -557,6 +557,47 @@ export const aiUsage = pgTable("aiUsage", {
 export type AiUsage = typeof aiUsage.$inferSelect;
 export type InsertAiUsage = typeof aiUsage.$inferInsert;
 
+// ── Basir Agent Mode ──────────────────────────────────────────────────
+// Persistent per-user tasks, opt-in memories and in-app-only reminders.
+export const basirTaskStatusEnum = pgEnum("basir_task_status", [
+  "draft",
+  "awaiting_approval",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+
+export const basirTasks = pgTable("basirTasks", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  status: basirTaskStatusEnum("status").default("draft").notNull(),
+  requiresApproval: boolean("requiresApproval").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [index("basir_tasks_user_idx").on(table.userId, table.createdAt)]);
+
+export const basirMemories = pgTable("basirMemories", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  text: varchar("text", { length: 500 }).notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("basir_memories_user_idx").on(table.userId)]);
+
+export const basirAutomationCadenceEnum = pgEnum("basir_automation_cadence", ["daily", "weekly"]);
+
+export const basirAutomations = pgTable("basirAutomations", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  cadence: basirAutomationCadenceEnum("cadence").default("daily").notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  lastRunAt: timestamp("lastRunAt"),
+  nextRunAt: timestamp("nextRunAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("basir_automations_due_idx").on(table.enabled, table.nextRunAt)]);
+
 // ── Member Learning Hub ──────────────────────────────────────────────
 // Video files are intentionally not stored here. Each lesson only keeps an
 // approved external URL plus its display metadata and cover image.

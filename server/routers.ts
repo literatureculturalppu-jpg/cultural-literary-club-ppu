@@ -124,6 +124,17 @@ import {
   getBasirUsageToday,
   incrementBasirUsage,
   getBasirUsageStats,
+  listBasirTasks,
+  createBasirTask,
+  updateBasirTaskStatus,
+  deleteBasirTask,
+  listBasirMemories,
+  createBasirMemory,
+  setBasirMemoryEnabled,
+  deleteBasirMemory,
+  listBasirAutomations,
+  createBasirAutomation,
+  deleteBasirAutomation,
   createGuestActivityRegistration,
   getGuestRegistrationsByActivity,
   deleteGuestActivityRegistrationById,
@@ -2963,6 +2974,23 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return deleteAiPdfFile(input);
       }),
+    tasks: router({
+      list: protectedProcedure.query(async ({ ctx }) => listBasirTasks(ctx.user.id)),
+      create: protectedProcedure.input(z.object({ title: z.string().trim().min(1).max(500), requiresApproval: z.boolean().default(true) })).mutation(async ({ input, ctx }) => createBasirTask(ctx.user.id, input.title, input.requiresApproval)),
+      updateStatus: protectedProcedure.input(z.object({ id: z.number().int().positive(), status: z.enum(["draft", "awaiting_approval", "in_progress", "completed", "cancelled"]) })).mutation(async ({ input, ctx }) => updateBasirTaskStatus(ctx.user.id, input.id, input.status)),
+      delete: protectedProcedure.input(z.number().int().positive()).mutation(async ({ input, ctx }) => { await deleteBasirTask(ctx.user.id, input); return { success: true }; }),
+    }),
+    memories: router({
+      list: protectedProcedure.query(async ({ ctx }) => listBasirMemories(ctx.user.id)),
+      create: protectedProcedure.input(z.object({ text: z.string().trim().min(1).max(500) })).mutation(async ({ input, ctx }) => createBasirMemory(ctx.user.id, input.text)),
+      setEnabled: protectedProcedure.input(z.object({ id: z.number().int().positive(), enabled: z.boolean() })).mutation(async ({ input, ctx }) => setBasirMemoryEnabled(ctx.user.id, input.id, input.enabled)),
+      delete: protectedProcedure.input(z.number().int().positive()).mutation(async ({ input, ctx }) => { await deleteBasirMemory(ctx.user.id, input); return { success: true }; }),
+    }),
+    automations: router({
+      list: protectedProcedure.query(async ({ ctx }) => listBasirAutomations(ctx.user.id)),
+      create: protectedProcedure.input(z.object({ title: z.string().trim().min(1).max(255), cadence: z.enum(["daily", "weekly"]) })).mutation(async ({ input, ctx }) => createBasirAutomation(ctx.user.id, input.title, input.cadence)),
+      delete: protectedProcedure.input(z.number().int().positive()).mutation(async ({ input, ctx }) => { await deleteBasirAutomation(ctx.user.id, input); return { success: true }; }),
+    }),
   }),
 
   learning: router({

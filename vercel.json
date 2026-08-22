@@ -43,6 +43,7 @@
   "crons": [
     { "path": "/api/cron/books-cleanup", "schedule": "0 3 * * *" },
     { "path": "/api/cron/meetings-cleanup", "schedule": "0 4 * * *" },
-    { "path": "/api/cron/worklogs-cleanup", "schedule": "0 5 * * *" }
+    { "path": "/api/cron/worklogs-cleanup", "schedule": "0 5 * * *" },
+    { "path": "/api/cron/basir-automations", "schedule": "0 6 * * *" }
   ]
 }

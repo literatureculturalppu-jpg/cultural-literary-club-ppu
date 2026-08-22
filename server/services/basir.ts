@@ -9,6 +9,7 @@ import {
   getVisibleTeamsPublic,
   getExternalLinks,
   getTeamsForUser,
+  listEnabledBasirMemoryTexts,
 } from "../db.js";
 
 /**
@@ -39,7 +40,7 @@ type ChatMessage = {
  * for anyone else, so Basir can never answer questions about another
  * member's private account data.
  */
-type CurrentUserContext = {
+export type CurrentUserContext = {
   id: number;
   name: string | null;
   referenceNumber: string | null;
@@ -185,7 +186,8 @@ ${CLUB_INFO}
 12. عند سؤال المستخدم عن كتاب معيّن، ابحث أولاً في "بيانات الكتب المتاحة" أدناه (كتب النادي). إن لم تجده هناك، يمكنك اقتراح البحث عنه عبر صفحة الكتب في الموقع باستخدام [[NAV|/books?q=...|ابحث عن الكتاب]] مع وضع عنوان الكتاب أو اسم الكاتب مكان "...".
 13. "روابط مفيدة" أدناه هي روابط خارجية معتمدة من إدارة النادي؛ يمكنك ذكر عنوانها ورابطها مباشرة كنص عادي عندما يطلب المستخدم رابطاً معيناً أو يسأل عن الروابط المتاحة.
 14. عند طلب المستخدم تنفيذ مهمة متعددة الخطوات، اعمل كوكيل مساعد: لخّص الهدف أولاً، ثم اقترح خطوات قصيرة واضحة، واذكر صراحة أي خطوة تحتاج ربط خدمة أو بحثاً خارجياً أو موافقة المستخدم. لا تدّعِ فتح متصفح أو إرسال رسالة أو نشر محتوى أو تشغيل أتمتة ما لم يكن ذلك متاحاً ومؤكداً في الواجهة.
-15. لا تطلب أو تخزن كلمات المرور أو رموز الدخول. لا تنفذ أي إجراء خارجي حساس مثل الإرسال أو النشر أو الحذف أو تعديل بيانات دون أن يراجع المستخدم الخطة ويؤكدها صراحة.
+	15. لا تطلب أو تخزن كلمات المرور أو رموز الدخول. لا تنفذ أي إجراء خارجي حساس مثل الإرسال أو النشر أو الحذف أو تعديل بيانات دون أن يراجع المستخدم الخطة ويؤكدها صراحة.
+	16. إن وُجد ضمن "حساب المستخدم الحالي" أدناه بند "أشياء طلب هذا المستخدم تحديداً أن تتذكرها عنه"، فهذه أشياء ذكرها المستخدم نفسه صراحة وطلب تذكّرها. استخدمها فقط عندما تُحسن الإجابة على سؤاله الحالي، ولا تقحمها في كل رد أو تكشفها إلا إن سأل المستخدم عمّا تتذكره عنه.
 
 ${pdfFilesList ? `ملفات التغذية المتاحة (PDF):\n${pdfFilesList}\nاستخدم محتوى هذه الملفات كأولوية عند الإجابة.\n` : ""}
 
@@ -330,6 +332,7 @@ const ROLE_LABELS: Record<string, string> = {
 function buildAccountContext(
   user: CurrentUserContext,
   userTeams: { name: string }[],
+  memories: string[],
 ): string {
   const lines = [
     `- الاسم: ${user.name || "غير محدد"}`,
@@ -346,6 +349,9 @@ function buildAccountContext(
   if (user.specialization) lines.push(`- التخصص: ${user.specialization}`);
   if (userTeams.length > 0) {
     lines.push(`- الفرق التي ينتمي إليها: ${userTeams.map((t) => t.name).join("، ")}`);
+  }
+  if (memories.length > 0) {
+    lines.push(`- أشياء طلب هذا المستخدم تحديداً أن تتذكرها عنه بين المحادثات:\n${memories.map((memory) => `  · ${memory}`).join("\n")}`);
   }
   return lines.join("\n");
 }
@@ -374,9 +380,12 @@ async function prepareGeminiContents(
     externalLinksCtx,
   } = await buildContextFromDb();
 
-  const userTeams = await getTeamsForUser(currentUser.id).catch(() => []);
+  const [userTeams, memories] = await Promise.all([
+    getTeamsForUser(currentUser.id).catch(() => []),
+    listEnabledBasirMemoryTexts(currentUser.id).catch(() => []),
+  ]);
 
-  const accountContext = buildAccountContext(currentUser, userTeams);
+  const accountContext = buildAccountContext(currentUser, userTeams, memories);
 
   const systemPrompt = buildSystemPrompt(
     activitiesCtx,

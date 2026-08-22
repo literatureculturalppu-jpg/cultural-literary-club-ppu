@@ -8,6 +8,7 @@ import { runScheduledMeetingsCleanup, autoEndEmptyLiveMeetings } from "../server
 import { securityHeaders, rateLimiter } from "../server/_core/security.js";
 import { registerBasirStreamRoute } from "../server/routes/basirStream.js";
 import { registerMobileRoutes } from "../server/routes/mobile.js";
+import { runDueBasirAutomations } from "../server/services/basirAgent.js";
 
 const app = express();
 // Vercel's edge always sits in front of this function, so `req.ip` is
@@ -84,6 +85,23 @@ app.get("/api/cron/worklogs-cleanup", async (req, res) => {
   } catch (error) {
     console.error("[Cron] Work logs cleanup failed", error);
     res.status(500).json({ error: "Cleanup failed" });
+  }
+});
+
+// Due Basir reminders are private in-app notifications only; no email,
+// publishing, or third-party action is performed by this scheduled route.
+app.get("/api/cron/basir-automations", async (req, res) => {
+  const expected = process.env.CRON_SECRET;
+  if (expected && req.headers.authorization !== `Bearer ${expected}`) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const result = await runDueBasirAutomations();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Cron] Basir automations failed", error);
+    res.status(500).json({ error: "Automation run failed" });
   }
 });
 

@@ -25,6 +25,9 @@ import {
   aiSettings,
   aiPdfFiles,
   aiUsage,
+  basirTasks,
+  basirMemories,
+  basirAutomations,
   learningSettings,
   learningCourses,
   learningVideos,
@@ -2203,6 +2206,117 @@ export async function updateAiEnabled(enabled: boolean) {
     await db.update(aiSettings).set({ enabled }).where(eq(aiSettings.id, existing[0].id));
   }
   return { enabled };
+}
+
+// ── Basir Agent Mode ──────────────────────────────────────────────────
+// Every operation below is scoped to one authenticated user. Limits prevent
+// unbounded personal storage and automated notification volume.
+const MAX_BASIR_TASKS_PER_USER = 100;
+const MAX_BASIR_MEMORIES_PER_USER = 40;
+const MAX_BASIR_AUTOMATIONS_PER_USER = 10;
+
+export async function listBasirTasks(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  return db.select().from(basirTasks).where(eq(basirTasks.userId, userId)).orderBy(desc(basirTasks.createdAt));
+}
+
+export async function createBasirTask(userId: number, title: string, requiresApproval: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const existing = await db.select({ n: count() }).from(basirTasks).where(eq(basirTasks.userId, userId));
+  if ((existing[0]?.n ?? 0) >= MAX_BASIR_TASKS_PER_USER) throw new Error("تم بلوغ الحد الأقصى لعدد المهام");
+  const [row] = await db.insert(basirTasks).values({ userId, title: title.slice(0, 500), requiresApproval }).returning();
+  return row;
+}
+
+export async function updateBasirTaskStatus(userId: number, id: number, status: (typeof basirTasks.$inferSelect)["status"]) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const [row] = await db.update(basirTasks).set({ status }).where(and(eq(basirTasks.id, id), eq(basirTasks.userId, userId))).returning();
+  if (!row) throw new Error("المهمة غير موجودة");
+  return row;
+}
+
+export async function deleteBasirTask(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.delete(basirTasks).where(and(eq(basirTasks.id, id), eq(basirTasks.userId, userId)));
+}
+
+export async function listBasirMemories(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  return db.select().from(basirMemories).where(eq(basirMemories.userId, userId)).orderBy(desc(basirMemories.createdAt));
+}
+
+export async function listEnabledBasirMemoryTexts(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const rows = await db.select({ text: basirMemories.text }).from(basirMemories).where(and(eq(basirMemories.userId, userId), eq(basirMemories.enabled, true))).orderBy(desc(basirMemories.createdAt)).limit(MAX_BASIR_MEMORIES_PER_USER);
+  return rows.map((row) => row.text);
+}
+
+export async function createBasirMemory(userId: number, text: string) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const existing = await db.select({ n: count() }).from(basirMemories).where(eq(basirMemories.userId, userId));
+  if ((existing[0]?.n ?? 0) >= MAX_BASIR_MEMORIES_PER_USER) throw new Error("تم بلوغ الحد الأقصى لعناصر الذاكرة");
+  const [row] = await db.insert(basirMemories).values({ userId, text: text.slice(0, 500) }).returning();
+  return row;
+}
+
+export async function setBasirMemoryEnabled(userId: number, id: number, enabled: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const [row] = await db.update(basirMemories).set({ enabled }).where(and(eq(basirMemories.id, id), eq(basirMemories.userId, userId))).returning();
+  if (!row) throw new Error("العنصر غير موجود");
+  return row;
+}
+
+export async function deleteBasirMemory(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.delete(basirMemories).where(and(eq(basirMemories.id, id), eq(basirMemories.userId, userId)));
+}
+
+export async function listBasirAutomations(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  return db.select().from(basirAutomations).where(eq(basirAutomations.userId, userId)).orderBy(desc(basirAutomations.createdAt));
+}
+
+function nextBasirAutomationRun(cadence: "daily" | "weekly", from: Date = new Date()) {
+  const next = new Date(from);
+  next.setDate(next.getDate() + (cadence === "weekly" ? 7 : 1));
+  return next;
+}
+
+export async function createBasirAutomation(userId: number, title: string, cadence: "daily" | "weekly") {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const existing = await db.select({ n: count() }).from(basirAutomations).where(eq(basirAutomations.userId, userId));
+  if ((existing[0]?.n ?? 0) >= MAX_BASIR_AUTOMATIONS_PER_USER) throw new Error("تم بلوغ الحد الأقصى للتذكيرات المؤتمتة");
+  const [row] = await db.insert(basirAutomations).values({ userId, title: title.slice(0, 255), cadence, nextRunAt: nextBasirAutomationRun(cadence) }).returning();
+  return row;
+}
+
+export async function deleteBasirAutomation(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.delete(basirAutomations).where(and(eq(basirAutomations.id, id), eq(basirAutomations.userId, userId)));
+}
+
+export async function getDueBasirAutomations(now: Date = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  return db.select().from(basirAutomations).where(and(eq(basirAutomations.enabled, true), lte(basirAutomations.nextRunAt, now)));
+}
+
+export async function markBasirAutomationRun(id: number, cadence: "daily" | "weekly", ranAt: Date = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.update(basirAutomations).set({ lastRunAt: ranAt, nextRunAt: nextBasirAutomationRun(cadence, ranAt) }).where(eq(basirAutomations.id, id));
 }
 
 // ── Member Learning Hub ──────────────────────────────────────────────
