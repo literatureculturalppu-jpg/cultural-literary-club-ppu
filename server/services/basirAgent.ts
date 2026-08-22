@@ -1,4 +1,4 @@
-import { createNotificationsForUsers, getDueBasirAutomations, getUserById, markBasirAutomationRun } from "../db.js";
+import { createNotificationsForUsers, getDueBasirAutomations, getDueBasirReminders, getUserById, markBasirAutomationRun, markBasirReminderDelivered } from "../db.js";
 import { chatWithBasir, type CurrentUserContext } from "./basir.js";
 
 function toBasirUserContext(user: NonNullable<Awaited<ReturnType<typeof getUserById>>>): CurrentUserContext {
@@ -23,6 +23,30 @@ export async function runDueBasirAutomations(): Promise<{ ran: number; failed: n
       console.error(`[BasirAgent] Failed to run automation ${automation.id}:`, error);
       failed++;
       await markBasirAutomationRun(automation.id, automation.cadence).catch(() => {});
+    }
+  }
+  return { ran, failed };
+}
+
+/** Delivers registered-activity reminders only to the activity subscriber. */
+export async function runDueBasirReminders(): Promise<{ ran: number; failed: number }> {
+  const due = await getDueBasirReminders();
+  let ran = 0;
+  let failed = 0;
+  for (const reminder of due) {
+    try {
+      await createNotificationsForUsers([reminder.userId], {
+        type: "announcement",
+        entityId: reminder.activityId ?? reminder.id,
+        title: "بصير: تذكير",
+        body: reminder.title,
+        url: reminder.activityId ? `/activities/${reminder.activityId}` : "/basir",
+      });
+      await markBasirReminderDelivered(reminder.id);
+      ran++;
+    } catch (error) {
+      console.error(`[BasirAgent] Failed to deliver reminder ${reminder.id}:`, error);
+      failed++;
     }
   }
   return { ran, failed };

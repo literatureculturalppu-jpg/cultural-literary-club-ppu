@@ -230,6 +230,11 @@ export default function AdminBasirSettings() {
                                 )
                               : ""}
                           </p>
+                          {pdf.summary ? (
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">{pdf.summary}</p>
+                          ) : (
+                            <p className="mt-1 text-xs text-muted-foreground/70">جارٍ إعداد ملخص تلقائي…</p>
+                          )}
                         </div>
                       </div>
                       <Button

@@ -28,6 +28,9 @@ import {
   basirTasks,
   basirMemories,
   basirAutomations,
+  basirReminders,
+  basirChatMessages,
+  basirUserPrefs,
   learningSettings,
   learningCourses,
   learningVideos,
@@ -2317,6 +2320,97 @@ export async function markBasirAutomationRun(id: number, cadence: "daily" | "wee
   const db = await getDb();
   if (!db) throw new Error("قاعدة البيانات غير متاحة");
   await db.update(basirAutomations).set({ lastRunAt: ranAt, nextRunAt: nextBasirAutomationRun(cadence, ranAt) }).where(eq(basirAutomations.id, id));
+}
+
+export async function linkBasirTaskToActivity(userId: number, id: number, activityId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const [row] = await db.update(basirTasks).set({ linkedActivityId: activityId }).where(and(eq(basirTasks.id, id), eq(basirTasks.userId, userId))).returning();
+  if (!row) throw new Error("المهمة غير موجودة");
+  return row;
+}
+
+const BASIR_STOPWORDS = new Set(["في", "من", "على", "إلى", "عن", "أن", "إن", "أو", "و", "ثم", "مع", "هذا", "هذه", "ذلك", "التي", "الذي", "كل", "بعض", "أكثر", "أقل", "غير", "بين", "كان", "يكون", "لا", "نعم"]);
+function basirKeywords(value: string) {
+  return value.split(/[^A-Za-z0-9\u0600-\u06FF]+/).map((word) => word.trim()).filter((word) => word.length >= 3 && !BASIR_STOPWORDS.has(word));
+}
+
+export async function getBasirActivityRecommendations(userId: number, limit = 3) {
+  const memories = await listEnabledBasirMemoryTexts(userId);
+  const interests = new Set(memories.flatMap(basirKeywords));
+  if (interests.size === 0) return [] as Array<{ activity: Activity; matchedKeywords: string[] }>;
+  const db = await getDb();
+  if (!db) return [] as Array<{ activity: Activity; matchedKeywords: string[] }>;
+  const activitiesList = await db.select().from(activities).where(eq(activities.status, "upcoming")).orderBy(activities.startDate).limit(50);
+  return activitiesList.map((activity) => ({ activity, matchedKeywords: Array.from(interests).filter((word) => new Set(basirKeywords(`${activity.title} ${activity.description}`)).has(word)) })).filter((row) => row.matchedKeywords.length > 0).sort((a, b) => b.matchedKeywords.length - a.matchedKeywords.length).slice(0, limit);
+}
+
+export async function createBasirReminder(userId: number, title: string, remindAt: Date, activityId?: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  const [row] = await db.insert(basirReminders).values({ userId, title: title.slice(0, 255), remindAt, activityId: activityId ?? null }).returning();
+  return row;
+}
+
+export async function scheduleActivityReminderIfUseful(userId: number, activity: Activity) {
+  const remindAt = new Date(activity.startDate.getTime() - 24 * 60 * 60 * 1000);
+  if (remindAt.getTime() <= Date.now()) return null;
+  return createBasirReminder(userId, `نشاط "${activity.title}" يبدأ غداً`, remindAt, activity.id);
+}
+
+export async function getDueBasirReminders(now: Date = new Date()) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(basirReminders).where(and(eq(basirReminders.delivered, false), lte(basirReminders.remindAt, now)));
+}
+
+export async function markBasirReminderDelivered(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(basirReminders).set({ delivered: true }).where(eq(basirReminders.id, id));
+}
+
+export async function getBasirUserPrefs(userId: number) {
+  const db = await getDb();
+  if (!db) return { userId, chatHistoryEnabled: false };
+  const [row] = await db.select().from(basirUserPrefs).where(eq(basirUserPrefs.userId, userId));
+  return row ?? { userId, chatHistoryEnabled: false };
+}
+
+export async function setBasirChatHistoryEnabled(userId: number, enabled: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("قاعدة البيانات غير متاحة");
+  await db.insert(basirUserPrefs).values({ userId, chatHistoryEnabled: enabled }).onConflictDoUpdate({ target: basirUserPrefs.userId, set: { chatHistoryEnabled: enabled } });
+  return { userId, chatHistoryEnabled: enabled };
+}
+
+const MAX_BASIR_CHAT_HISTORY_MESSAGES = 200;
+export async function appendBasirChatMessages(userId: number, messages: Array<{ role: "user" | "assistant"; content: string }>) {
+  const db = await getDb();
+  if (!db || messages.length === 0) return;
+  await db.insert(basirChatMessages).values(messages.map((message) => ({ userId, role: message.role, content: message.content.slice(0, 10000) })));
+  const rows = await db.select({ id: basirChatMessages.id }).from(basirChatMessages).where(eq(basirChatMessages.userId, userId)).orderBy(desc(basirChatMessages.createdAt));
+  const staleIds = rows.slice(MAX_BASIR_CHAT_HISTORY_MESSAGES).map((row) => row.id);
+  if (staleIds.length) await db.delete(basirChatMessages).where(inArray(basirChatMessages.id, staleIds));
+}
+
+export async function listBasirChatMessages(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(basirChatMessages).where(eq(basirChatMessages.userId, userId)).orderBy(desc(basirChatMessages.createdAt)).limit(MAX_BASIR_CHAT_HISTORY_MESSAGES);
+  return rows.reverse();
+}
+
+export async function clearBasirChatMessages(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(basirChatMessages).where(eq(basirChatMessages.userId, userId));
+}
+
+export async function setAiPdfFileSummary(id: number, summary: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(aiPdfFiles).set({ summary }).where(eq(aiPdfFiles.id, id));
 }
 
 // ── Member Learning Hub ──────────────────────────────────────────────

@@ -135,6 +135,15 @@ import {
   listBasirAutomations,
   createBasirAutomation,
   deleteBasirAutomation,
+  linkBasirTaskToActivity,
+  getBasirActivityRecommendations,
+  scheduleActivityReminderIfUseful,
+  getBasirUserPrefs,
+  setBasirChatHistoryEnabled,
+  appendBasirChatMessages,
+  listBasirChatMessages,
+  clearBasirChatMessages,
+  setAiPdfFileSummary,
   createGuestActivityRegistration,
   getGuestRegistrationsByActivity,
   deleteGuestActivityRegistrationById,
@@ -211,7 +220,7 @@ import { notifyOwner } from "./_core/notification.js";
 import { broadcastEmailTemplate, sendPersonalizedBulkEmail, EmailPriority } from "./services/email.js";
 import { notifyContentCreated, notifyActivityApproval, notifyActivityRegistrationAdmins, notifyBookCreated, notifyGuestActivityApproval, notifyTeamInApp, notifyUserEvent } from "./services/notify.js";
 import { sendMobilePushForNotifications } from "./services/mobilePush.js";
-import { chatWithBasir } from "./services/basir.js";
+import { chatWithBasir, summarizePdfWithGemini } from "./services/basir.js";
 import { generateImageEphemeral } from "./_core/imageGeneration.js";
 import { searchBooks, getGoogleBookById } from "./services/googleBooks.js";
 import {
@@ -542,6 +551,7 @@ export const appRouter = router({
           userId: ctx.user.id,
           activityId: input,
         });
+        void scheduleActivityReminderIfUseful(ctx.user.id, activity).catch(() => {});
         void notifyActivityRegistrationAdmins({
           activityId: input,
           activityTitle: activity.title,
@@ -2954,13 +2964,17 @@ export const appRouter = router({
             buffer,
             mimeType,
           );
-          return createAiPdfFile({
+          const created = await createAiPdfFile({
             fileName: input.fileName,
             fileUrl: url,
             fileKey: key,
             fileSize: input.fileSize ?? buffer.length,
             uploadedBy: ctx.user.id,
           });
+          void summarizePdfWithGemini(encoded, mimeType, input.fileName)
+            .then((summary) => { if (summary) return setAiPdfFileSummary(created.id, summary); return null; })
+            .catch(() => {});
+          return created;
         } catch (error) {
           console.error("[basir.uploadPdf] failed", error);
           throw new TRPCError({
@@ -2978,6 +2992,7 @@ export const appRouter = router({
       list: protectedProcedure.query(async ({ ctx }) => listBasirTasks(ctx.user.id)),
       create: protectedProcedure.input(z.object({ title: z.string().trim().min(1).max(500), requiresApproval: z.boolean().default(true) })).mutation(async ({ input, ctx }) => createBasirTask(ctx.user.id, input.title, input.requiresApproval)),
       updateStatus: protectedProcedure.input(z.object({ id: z.number().int().positive(), status: z.enum(["draft", "awaiting_approval", "in_progress", "completed", "cancelled"]) })).mutation(async ({ input, ctx }) => updateBasirTaskStatus(ctx.user.id, input.id, input.status)),
+      linkActivity: protectedProcedure.input(z.object({ id: z.number().int().positive(), activityId: z.number().int().positive().nullable() })).mutation(async ({ input, ctx }) => linkBasirTaskToActivity(ctx.user.id, input.id, input.activityId)),
       delete: protectedProcedure.input(z.number().int().positive()).mutation(async ({ input, ctx }) => { await deleteBasirTask(ctx.user.id, input); return { success: true }; }),
     }),
     memories: router({
@@ -2990,6 +3005,25 @@ export const appRouter = router({
       list: protectedProcedure.query(async ({ ctx }) => listBasirAutomations(ctx.user.id)),
       create: protectedProcedure.input(z.object({ title: z.string().trim().min(1).max(255), cadence: z.enum(["daily", "weekly"]) })).mutation(async ({ input, ctx }) => createBasirAutomation(ctx.user.id, input.title, input.cadence)),
       delete: protectedProcedure.input(z.number().int().positive()).mutation(async ({ input, ctx }) => { await deleteBasirAutomation(ctx.user.id, input); return { success: true }; }),
+    }),
+    recommendActivities: protectedProcedure.query(async ({ ctx }) => getBasirActivityRecommendations(ctx.user.id)),
+    chatHistory: router({
+      getPrefs: protectedProcedure.query(async ({ ctx }) => getBasirUserPrefs(ctx.user.id)),
+      setEnabled: protectedProcedure.input(z.object({ enabled: z.boolean() })).mutation(async ({ input, ctx }) => {
+        if (!input.enabled) await clearBasirChatMessages(ctx.user.id);
+        return setBasirChatHistoryEnabled(ctx.user.id, input.enabled);
+      }),
+      list: protectedProcedure.query(async ({ ctx }) => {
+        const prefs = await getBasirUserPrefs(ctx.user.id);
+        return prefs.chatHistoryEnabled ? listBasirChatMessages(ctx.user.id) : [];
+      }),
+      append: protectedProcedure.input(z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(10000) })).max(4)).mutation(async ({ input, ctx }) => {
+        const prefs = await getBasirUserPrefs(ctx.user.id);
+        if (!prefs.chatHistoryEnabled) return { saved: false };
+        await appendBasirChatMessages(ctx.user.id, input);
+        return { saved: true };
+      }),
+      clear: protectedProcedure.mutation(async ({ ctx }) => { await clearBasirChatMessages(ctx.user.id); return { success: true }; }),
     }),
   }),
 

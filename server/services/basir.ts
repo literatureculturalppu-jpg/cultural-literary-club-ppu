@@ -494,6 +494,36 @@ export async function chatWithBasir(
 }
 
 /**
+ * Stateless summary of one administrator-uploaded PDF. It has no user
+ * account context or history and failure never blocks the original upload.
+ */
+export async function summarizePdfWithGemini(base64Data: string, mimeType: string, fileName: string): Promise<string | null> {
+  if (!ENV.geminiApiKey) return null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+    const response = await fetch(`${url}?key=${ENV.geminiApiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [
+          { inlineData: { mimeType, data: base64Data } },
+          { text: `لخّص محتوى هذا الملف (${fileName}) في 2-3 جمل بالعربية فقط، بلا مقدمات، ليستخدمه إداري النادي كملخص سريع لملف تغذية بصير.` },
+        ] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 300 },
+        safetySettings: SAFETY_SETTINGS,
+      }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    return typeof text === "string" && text.trim() ? text.trim().slice(0, 1000) : null;
+  } catch (error) {
+    console.error("[Basir] PDF summary failed", error);
+    return null;
+  }
+}
+
+/**
  * Streaming counterpart of `chatWithBasir`. Calls Gemini's
  * `streamGenerateContent` endpoint (Server-Sent Events) and invokes
  * `onChunk` with each incremental piece of text as it arrives, so the

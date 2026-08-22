@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import type { Message, MessageAttachment } from "@/components/AIChatBox";
 import { isAllowedNavPath } from "@/components/BasirNavChip";
@@ -86,11 +86,22 @@ export function useBasirChat(enabled: boolean, onNavigate?: (path: string) => vo
   const [isLoading, setIsLoading] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const seededFromServer = useRef(false);
 
   const { data: settings } = trpc.basir.getSettings.useQuery();
   const { data: usage, refetch: refetchUsage } = trpc.basir.getUsage.useQuery(undefined, {
     enabled,
   });
+  const { data: serverHistory } = trpc.basir.chatHistory.list.useQuery(undefined, { enabled });
+  const appendServerHistory = trpc.basir.chatHistory.append.useMutation();
+
+  useEffect(() => {
+    if (!serverHistory?.length || messages.length > 0 || seededFromServer.current) return;
+    seededFromServer.current = true;
+    const seeded: Message[] = serverHistory.map((message) => ({ role: message.role, content: message.content }));
+    setMessages(seeded);
+    saveHistory(seeded);
+  }, [messages.length, serverHistory]);
 
   const stopGenerating = useCallback(() => {
     abortRef.current?.abort();
@@ -167,6 +178,12 @@ export function useBasirChat(enabled: boolean, onNavigate?: (path: string) => vo
           saveHistory(updated);
           return updated;
         });
+        // The server verifies the opt-in preference and discards this request
+        // when history is disabled, so calling it here cannot enable storage.
+        appendServerHistory.mutate([
+          { role: "user", content: userMsg.content },
+          { role: "assistant", content: cleaned },
+        ]);
         if (path && onNavigate) {
           setTimeout(() => onNavigate(path), 700);
         }
@@ -229,7 +246,7 @@ export function useBasirChat(enabled: boolean, onNavigate?: (path: string) => vo
         abortRef.current = null;
       }
     },
-    [messages, usage, onNavigate, refetchUsage]
+    [messages, usage, onNavigate, refetchUsage, appendServerHistory]
   );
 
   const clearHistory = useCallback(() => {

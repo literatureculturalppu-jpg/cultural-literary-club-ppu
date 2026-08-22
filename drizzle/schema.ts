@@ -533,6 +533,7 @@ export const aiPdfFiles = pgTable("aiPdfFiles", {
   fileUrl: varchar("fileUrl", { length: 500 }).notNull(),
   fileKey: varchar("fileKey", { length: 255 }).notNull(),
   fileSize: integer("fileSize"),
+  summary: text("summary"),
   uploadedBy: integer("uploadedBy").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -573,6 +574,7 @@ export const basirTasks = pgTable("basirTasks", {
   title: varchar("title", { length: 500 }).notNull(),
   status: basirTaskStatusEnum("status").default("draft").notNull(),
   requiresApproval: boolean("requiresApproval").default(true).notNull(),
+  linkedActivityId: integer("linkedActivityId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [index("basir_tasks_user_idx").on(table.userId, table.createdAt)]);
@@ -597,6 +599,34 @@ export const basirAutomations = pgTable("basirAutomations", {
   nextRunAt: timestamp("nextRunAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("basir_automations_due_idx").on(table.enabled, table.nextRunAt)]);
+
+export const basirReminders = pgTable("basirReminders", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  activityId: integer("activityId"),
+  title: varchar("title", { length: 255 }).notNull(),
+  remindAt: timestamp("remindAt").notNull(),
+  delivered: boolean("delivered").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("basir_reminders_due_idx").on(table.delivered, table.remindAt)]);
+
+export const basirChatRoleEnum = pgEnum("basir_chat_role", ["user", "assistant"]);
+
+// This table is only populated after the owner explicitly opts in through
+// basirUserPrefs. New accounts are always opted out.
+export const basirChatMessages = pgTable("basirChatMessages", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  role: basirChatRoleEnum("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("basir_chat_messages_user_idx").on(table.userId, table.createdAt)]);
+
+export const basirUserPrefs = pgTable("basirUserPrefs", {
+  userId: integer("userId").primaryKey(),
+  chatHistoryEnabled: boolean("chatHistoryEnabled").default(false).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
 
 // ── Member Learning Hub ──────────────────────────────────────────────
 // Video files are intentionally not stored here. Each lesson only keeps an

@@ -8,7 +8,7 @@ import { runScheduledMeetingsCleanup, autoEndEmptyLiveMeetings } from "../server
 import { securityHeaders, rateLimiter } from "../server/_core/security.js";
 import { registerBasirStreamRoute } from "../server/routes/basirStream.js";
 import { registerMobileRoutes } from "../server/routes/mobile.js";
-import { runDueBasirAutomations } from "../server/services/basirAgent.js";
+import { runDueBasirAutomations, runDueBasirReminders } from "../server/services/basirAgent.js";
 
 const app = express();
 // Vercel's edge always sits in front of this function, so `req.ip` is
@@ -97,8 +97,8 @@ app.get("/api/cron/basir-automations", async (req, res) => {
     return;
   }
   try {
-    const result = await runDueBasirAutomations();
-    res.json({ success: true, ...result });
+    const [automations, reminders] = await Promise.all([runDueBasirAutomations(), runDueBasirReminders()]);
+    res.json({ success: true, automations, reminders });
   } catch (error) {
     console.error("[Cron] Basir automations failed", error);
     res.status(500).json({ error: "Automation run failed" });
